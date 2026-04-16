@@ -1,0 +1,208 @@
+#!/usr/bin/env fish
+
+set -gx wireClaudeTaskScriptDir (dirname (realpath (status filename)))
+set -gx wireDevContainerRoot (dirname $wireClaudeTaskScriptDir)
+set -gx wireRepoRoot (realpath (dirname $wireDevContainerRoot))
+set -gx codeRoot (realpath (dirname $wireRepoRoot))
+set -gx wireTaskRoot $codeRoot/wire-tasks
+set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-e2e-tests wire-ethereum wire-solana wire-vcpkg-registry
+
+function die
+    echo "$argv[1]"
+    exit 255
+end
+
+function run
+    set cmd $argv
+    eval "$cmd"; or die "An error occurred while executing: $cmd"
+end
+
+function set-default
+    set newValue $argv[1]
+    set -q $newValue
+    and echo $newValue
+    or echo $argv[2]
+end
+
+function set-or-default
+    set newValue $argv[1]
+    if test -z $newValue
+        set $newValue $argv[2]
+    end
+end
+
+function _usage
+    echo "Usage: claude-task-env [OPTIONS] COMMAND [ARGS...]"
+    echo ""
+    echo "Manage claude task worktrees and devcontainers."
+    echo ""
+    echo "Options:"
+    echo "  -h, --help   Show this help"
+    echo ""
+    echo "Commands:"
+    echo "  up     Create worktrees and launch a claude task in a devcontainer"
+    echo "  down   Tear down a claude task and remove its worktrees"
+end
+
+function _cmd_up
+    argparse -n 'claude-task-env up' 'h/help' 'c/cores=!_validate_int --min 1' -- $argv
+    or return 1
+
+    if set -q _flag_help
+        echo "Usage: claude-task-env up [OPTIONS] TASK_ID BRANCH [REPO...]"
+        echo ""
+        echo "Create worktrees and launch a claude task in a devcontainer."
+        echo ""
+        echo "Options:"
+        echo "  -h, --help        Show this help"
+        echo "  -c, --cores NUM   Number of CPU cores per task (default: 8)"
+        echo ""
+        echo "Arguments:"
+        echo "  TASK_ID   Unique identifier for the task"
+        echo "  BRANCH    Git branch to checkout in worktrees"
+        echo "  REPO...   Additional repos (always includes: $_wireDefaultRepos)"
+        return 0
+    end
+
+    if test (count $argv) -lt 2
+        echo "Error: TASK_ID and BRANCH are required"
+        echo "Run 'claude-task-env up --help' for usage"
+        return 1
+    end
+
+    set -l task_id $argv[1]
+    set -l branch $argv[2]
+    set -l extra_repos $argv[3..-1]
+    set -l cores (test -n "$_flag_cores" && echo $_flag_cores || echo 16)
+
+    # merge default + extra repos, deduplicate
+    set -l all_repos
+    for r in $_wireDefaultRepos $extra_repos
+        if not contains -- $r $all_repos
+            set -a all_repos $r
+        end
+    end
+
+    set -l wt $wireTaskRoot/$task_id
+    echo "Setting up
+    taskd_id=$task_id
+    branch=$branch
+    repos: $all_repos
+    worktree=$wt"
+    run mkdir -p $wt ~/.claude-tasks/$task_id
+
+    for r in $all_repos
+        set -l repo_path $wireRepoRoot/$r
+        echo "Adding $r from $repo_path to worktree..."
+        if not test -d $repo_path
+            echo "Warning: repo $repo_path does not exist, skipping"
+            exit 1
+        end
+
+        run git -C $repo_path worktree add $wt/$r $branch
+        or begin
+            echo "Error: failed to create worktree for $r"
+            continue
+        end
+
+        # initialize submodules if present
+        if test -f $wt/$r/.gitmodules
+            echo "Initializing submodules for $r..."
+            run git -C $wt/$r submodule update --init --recursive
+        end
+    end
+
+    set _opp_path $wireRepoRoot/wire-opp
+		if test -d $_opp_path
+			run cp -R $_opp_path $wt/wire-opp
+		end
+
+    # pin cores per task; adjust per machine load
+    set -l task_id_num (string match -r '\d+' $task_id | head -1)
+    set -l base (math "($task_id_num - 1) * $cores")
+    set -l cpus "$base-"(math "$base + $cores - 1")
+
+		cd $wireRepoRoot
+    run env TASK_ID=$task_id TASK_WORKTREE=$wt TASK_CPUS=$cpus \
+        devcontainer up --workspace-folder $wt
+    run env TASK_ID=$task_id TASK_WORKTREE=$wt TASK_CPUS=$cpus \
+        devcontainer exec --workspace-folder $wt claude --permission-mode bypassPermissions
+end
+
+function _cmd_down
+    argparse -n 'claude-task-env down' 'h/help' -- $argv
+    or return 1
+
+    if set -q _flag_help
+        echo "Usage: claude-task-env down [OPTIONS] TASK_ID"
+        echo ""
+        echo "Tear down a claude task and remove its worktrees."
+        echo ""
+        echo "Options:"
+        echo "  -h, --help   Show this help"
+        echo ""
+        echo "Arguments:"
+        echo "  TASK_ID   Identifier of the task to tear down"
+        return 0
+    end
+
+    if test (count $argv) -lt 1
+        echo "Error: TASK_ID is required"
+        echo "Run 'claude-task-env down --help' for usage"
+        return 1
+    end
+
+    set -l task_id $argv[1]
+    set -l wt $wireTaskRoot/$task_id
+    run docker rm -f claude-$task_id 2>/dev/null
+    for d in $wt/*
+        run git -C (readlink -f $wireRepoRoot/(basename $d)) worktree remove --force $d
+    end
+    run rm -rf ~/.claude-tasks/$task_id $wt
+end
+
+# --- main entrypoint ---
+
+echo "claude-task-env:
+codeRoot=$codeRoot
+wireRepoRoot=$wireRepoRoot
+wireTaskRoot=$wireTaskRoot"
+
+if not test -x (which docker)
+    die "Error: Docker is not installed or not in PATH"
+end
+
+if not test (docker images --quiet wire-devcontainer | wc -l) -gt 0
+    pushd $wireDevContainerRoot
+    run docker build --progress=plain --network=host-t wire-devcontainer:latest .
+    popd
+end
+
+run mkdir -p $wireTaskRoot
+if not test -d $wireTaskRoot
+    echo "Error: wireTaskRoot $wireTaskRoot does not exist or is not a directory."
+    exit 1
+end
+
+# parse top-level flags, leaving the command + its args in $argv
+argparse -n claude-task-env -s 'h/help' -- $argv
+or exit 1
+
+if set -q _flag_help; or test (count $argv) -eq 0
+    _usage
+    exit 0
+end
+
+set -l cmd $argv[1]
+set -l cmd_argv $argv[2..-1]
+
+switch $cmd
+    case up
+        _cmd_up $cmd_argv
+    case down
+        _cmd_down $cmd_argv
+    case '*'
+        echo "Error: unknown command '$cmd'"
+        _usage
+        exit 1
+end

@@ -1,0 +1,74 @@
+#!/usr/bin/env fish
+
+set -gx wireClaudeTaskScriptDir (dirname (realpath (status filename)))
+set -gx wireDevContainerRoot (dirname $wireClaudeTaskScriptDir)
+set -gx wireRepoRoot (realpath (dirname $wireDevContainerRoot))
+set -gx codeRoot (realpath (dirname $wireRepoRoot))
+set -gx wireTaskRoot $codeRoot/wire-tasks
+set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-e2e-tests wire-ethereum wire-solana wire-vcpkg-registry
+
+function die
+    echo "$argv[1]"
+    exit 255
+end
+
+function run
+    set cmd $argv
+    eval "$cmd"; or die "An error occurred while executing: $cmd"
+end
+
+function set-default
+    set newValue $argv[1]
+    set -q $newValue
+    and echo $newValue
+    or echo $argv[2]
+end
+
+function set-or-default
+    set newValue $argv[1]
+    if test -z $newValue
+        set $newValue $argv[2]
+    end
+end
+
+
+# --- main entrypoint ---
+
+echo "devcontainer-setup:
+codeRoot=$codeRoot
+wireRepoRoot=$wireRepoRoot
+wireTaskRoot=$wireTaskRoot"
+
+# verify all default repos exist
+set -l _missingRepos
+for r in $_wireDefaultRepos
+    if not test -d $wireRepoRoot/$r
+        set -a _missingRepos $r
+    end
+end
+if test (count $_missingRepos) -gt 0
+    die "Error: missing required repos in $wireRepoRoot: $_missingRepos"
+end
+
+if not test -x (which docker)
+    die "Error: Docker is not installed or not in PATH"
+end
+
+if not test (docker images --quiet wire-devcontainer | wc -l) -gt 0
+    pushd $wireDevContainerRoot
+    run docker build --progress=plain --network=host -t wire-devcontainer:latest .
+    popd
+end
+
+run mkdir -p $wireTaskRoot
+if not test -d $wireTaskRoot
+    echo "Error: wireTaskRoot $wireTaskRoot does not exist or is not a directory."
+    exit 1
+end
+
+mkdir -p $HOME/.local/bin
+ln -sf $wireDevContainerRoot/scripts/claude-task-env $HOME/.local/bin/claude-task-env
+echo "Created symlink for claude-task-env at $HOME/.local/bin/claude-task-env"
+
+ln -sf $wireDevContainerRoot/.devcontainer $wireRepoRoot/.devcontainer
+echo "All required repos are present and Docker is available. You can now run `claude-task-env`"
