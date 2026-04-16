@@ -6,6 +6,7 @@ set -gx wireRepoRoot (realpath (dirname $wireDevContainerRoot))
 set -gx codeRoot (realpath (dirname $wireRepoRoot))
 set -gx wireTaskRoot $codeRoot/wire-tasks
 set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-e2e-tests wire-ethereum wire-solana wire-vcpkg-registry
+set -gx cpuCount 16
 
 function die
     echo "$argv[1]"
@@ -55,25 +56,21 @@ function _cmd_up
         echo ""
         echo "Options:"
         echo "  -h, --help        Show this help"
-        echo "  -c, --cores NUM   Number of CPU cores per task (default: 8)"
         echo ""
         echo "Arguments:"
         echo "  TASK_ID   Unique identifier for the task"
-        echo "  BRANCH    Git branch to checkout in worktrees"
         echo "  REPO...   Additional repos (always includes: $_wireDefaultRepos)"
         return 0
     end
 
-    if test (count $argv) -lt 2
-        echo "Error: TASK_ID and BRANCH are required"
+    if test (count $argv) -lt 1
+        echo "Error: TASK_ID is required"
         echo "Run 'claude-task-env up --help' for usage"
         return 1
     end
 
     set -l task_id $argv[1]
-    set -l branch $argv[2]
-    set -l extra_repos $argv[3..-1]
-    set -l cores (test -n "$_flag_cores" && echo $_flag_cores || echo 16)
+    set -l extra_repos $argv[2..-1]
 
     # merge default + extra repos, deduplicate
     set -l all_repos
@@ -86,10 +83,14 @@ function _cmd_up
     set -l wt $wireTaskRoot/$task_id
     echo "Setting up
     taskd_id=$task_id
-    branch=$branch
     repos: $all_repos
     worktree=$wt"
-    run mkdir -p $wt ~/.claude-tasks/$task_id
+    run mkdir -p $wt ~/.claude-tasks/
+    if not test -d ~/.claude-tasks/$task_id
+				run mkdir -p ~/.claude-tasks/$task_id
+				run rsync -av ~/.claude/ ~/.claude-tasks/$task_id/
+		end
+
 
     for r in $all_repos
         set -l repo_path $wireRepoRoot/$r
@@ -99,17 +100,23 @@ function _cmd_up
             exit 1
         end
 
-        run git -C $repo_path worktree add $wt/$r $branch
-        or begin
-            echo "Error: failed to create worktree for $r"
-            continue
-        end
+				if test -d $wt/$r
+					echo "Worktree for $r already exists, skipping git worktree add"
+					continue
+				end
+
+				set -l repo_branch \
+					(git -C $repo_path symbolic-ref --short HEAD 2> /dev/null || \
+					git -C $repo_path show-ref --head -s --abbrev | head -n1 2> /dev/null)
+				echo "repo $r: '$repo_branch'"
+				run git -C $repo_path worktree add -f $wt/$r $repo_branch
 
         # initialize submodules if present
         if test -f $wt/$r/.gitmodules
             echo "Initializing submodules for $r..."
             run git -C $wt/$r submodule update --init --recursive
         end
+
     end
 
     set _opp_path $wireRepoRoot/wire-opp
@@ -117,15 +124,14 @@ function _cmd_up
 			run cp -R $_opp_path $wt/wire-opp
 		end
 
-    # pin cores per task; adjust per machine load
-    set -l task_id_num (string match -r '\d+' $task_id | head -1)
-    set -l base (math "($task_id_num - 1) * $cores")
-    set -l cpus "$base-"(math "$base + $cores - 1")
+		if not test -d $wt/.devcontainer
+			cp -R $wireDevContainerRoot/.devcontainer $wt/.devcontainer
+		end
 
 		cd $wireRepoRoot
-    run env TASK_ID=$task_id TASK_WORKTREE=$wt TASK_CPUS=$cpus \
+    run env TASK_ID=$task_id TASK_WORKTREE=$wt TASK_CPUS=$cpuCount \
         devcontainer up --workspace-folder $wt
-    run env TASK_ID=$task_id TASK_WORKTREE=$wt TASK_CPUS=$cpus \
+    run env TASK_ID=$task_id TASK_WORKTREE=$wt TASK_CPUS=$cpuCount \
         devcontainer exec --workspace-folder $wt claude --permission-mode bypassPermissions
 end
 
@@ -156,6 +162,10 @@ function _cmd_down
     set -l wt $wireTaskRoot/$task_id
     run docker rm -f claude-$task_id 2>/dev/null
     for d in $wt/*
+        if not test -d $wireRepoRoot/(basename $d)/.git
+						echo "Warning: $d is not a git worktree, skipping"
+						continue
+				end
         run git -C (readlink -f $wireRepoRoot/(basename $d)) worktree remove --force $d
     end
     run rm -rf ~/.claude-tasks/$task_id $wt

@@ -21,7 +21,8 @@
 		"source=${localEnv:HOME}/.claude.json,target=/home/dev/.claude.json,type=bind,readonly"
 	],
 	"containerEnv": {
-		"TASK_ID": "${localEnv:TASK_ID}"
+		"TASK_ID": "${localEnv:TASK_ID}",
+		"PATH": "/cache/pnpm:/home/dev/.local/bin:/cache/nvm/versions/node/default/bin:/home/dev/.local/share/solana/install/active_release/bin:/home/dev/.foundry/bin:/cache/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 	},
 	"remoteUser": "dev"
 }

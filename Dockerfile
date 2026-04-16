@@ -88,7 +88,6 @@ RUN mkdir -p \
     ${PNPM_STORE_DIR} \
     ${CARGO_HOME} \
     ${VCPKG_BINARY_CACHE_DIR} \
-    ${CLAUDE_CONFIG_DIR} \
     ${NVM_DIR} \
     ${WIRE_WORKSPACE}
 
@@ -114,16 +113,18 @@ RUN bash -c 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/insta
     && source "${NVM_DIR}/nvm.sh" \
     && nvm install 24.14.1 \
     && nvm alias default 24.14.1 \
-    && ln -s "${NVM_DIR}/versions/node/$(nvm version default)" "${NVM_DIR}/versions/node/default" \
-    && corepack enable \
-    && corepack prepare pnpm@10.32.1 --activate'
+    && ln -s "${NVM_DIR}/versions/node/$(nvm version default)" "${NVM_DIR}/versions/node/default"'
+
 ENV PATH="${NVM_DIR}/versions/node/default/bin:${PATH}"
 
 # Set up pnpm global bin directory
-ENV PATH="${PNPM_HOME}:${PATH}"
+ENV PATH="${PNPM_HOME}:${HOME}/.local/bin:${PATH}"
+ENV SHELL="/usr/bin/fish"
+RUN npm install -g @anthropic-ai/claude-code pnpm tsc typescript@6
 RUN pnpm setup || true
 
-RUN curl -fsSL https://claude.ai/install | bash
+#RUN curl -fsSL https://claude.ai/install | bash
+
 
 # SETUP PKG_CACHE_PATH FOR `@yao-pkg/pkg` & `pkg`
 ENV PKG_CACHE_PATH=${HOME}/.pkg-cache
@@ -132,7 +133,9 @@ RUN mkdir -p ${PKG_CACHE_PATH}/v3.5/ && \
     find ${PKG_CACHE_PATH}
 COPY assets/pkg/* ${PKG_CACHE_PATH}/v3.5/
 
-
+RUN echo "export PATH=${PATH}" >> ${HOME}/.profile && \
+		echo "export PATH=${PATH}" >> ${HOME}/.bashrc && \
+		echo "export PATH=${PATH}" >> ${HOME}/.config/fish/config.fish
 WORKDIR /workspace
 
 ENTRYPOINT ["/usr/bin/tini", "--"]

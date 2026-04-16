@@ -1,6 +1,7 @@
 # wire-devcontainer
 
-Containerized, isolated environments for running parallel Claude Code sessions against Wire blockchain repos. Each task gets its own git worktrees and devcontainer while sharing build caches across tasks.
+Containerized, isolated environments for running parallel Claude Code sessions against Wire blockchain repos. Each task
+gets its own git worktrees and devcontainer while sharing build caches across tasks.
 
 ## Prerequisites
 
@@ -8,9 +9,10 @@ Containerized, isolated environments for running parallel Claude Code sessions a
 - Fish shell
 - [devcontainer CLI](https://github.com/devcontainers/cli) (`npm install -g @devcontainers/cli`)
 - All required Wire repos cloned as siblings under the same parent directory:
-  - `wire-sysio`, `wire-cdt`, `wire-libraries-ts`, `wire-e2e-tests`
-  - `wire-ethereum`, `wire-solana`, `wire-vcpkg-registry`
-  - `wire-opp` (optional, is not a repo, but rather a generated artifact for OPP Protobufs, copied into worktree if present, generated otherwise)
+    - `wire-sysio`, `wire-cdt`, `wire-libraries-ts`, `wire-e2e-tests`
+    - `wire-ethereum`, `wire-solana`, `wire-vcpkg-registry`
+    - `wire-opp` (optional, is not a repo, but rather a generated artifact for OPP Protobufs, copied into worktree if
+      present, generated otherwise)
 
 ## Quick Start
 
@@ -52,13 +54,12 @@ claude-task-env down task-1
 
 ### Task Lifecycle
 
-**`claude-task-env up TASK_ID BRANCH [REPO...]`**
+**`claude-task-env up TASK_ID [REPO...]`**
 
 1. Creates git worktrees for all default repos (+ any extras) at `wire-tasks/<TASK_ID>/`
 2. Initializes git submodules where `.gitmodules` exists
 3. Copies `wire-opp` into the worktree if the repo exists
-4. Pins CPU cores to the task (based on TASK_ID number and `--cores`)
-5. Launches a devcontainer and opens a Claude Code session inside it
+4. Launches a devcontainer and opens a Claude Code session inside it
 
 **`claude-task-env down TASK_ID`**
 
@@ -70,12 +71,12 @@ claude-task-env down task-1
 
 Docker named volumes persist across tasks and container rebuilds:
 
-| Volume | Mount | Purpose |
-|--------|-------|---------|
+| Volume        | Mount           | Purpose                          |
+|---------------|-----------------|----------------------------------|
 | `wire-ccache` | `/cache/ccache` | C/C++ compiler cache (100GB max) |
-| `wire-vcpkg` | `/cache/vcpkg` | vcpkg binary cache |
-| `wire-pnpm` | `/cache/pnpm` | pnpm package store |
-| `wire-cargo` | `/cache/cargo` | Rust/Cargo cache |
+| `wire-vcpkg`  | `/cache/vcpkg`  | vcpkg binary cache               |
+| `wire-pnpm`   | `/cache/pnpm`   | pnpm package store               |
+| `wire-cargo`  | `/cache/cargo`  | Rust/Cargo cache                 |
 
 Task-specific Claude config is bind-mounted from `~/.claude-tasks/<TASK_ID>/`.
 
@@ -104,10 +105,10 @@ The `wire-devcontainer:latest` image (Ubuntu 24.04) includes:
 
 ## Scripts
 
-| Script | Purpose |
-|--------|---------|
+| Script                       | Purpose                                                                                             |
+|------------------------------|-----------------------------------------------------------------------------------------------------|
 | `scripts/devcontainer-setup` | One-time setup: validates repos, builds Docker image, symlinks `claude-task-env` to `~/.local/bin/` |
-| `scripts/claude-task-env` | Main CLI: `up` and `down` subcommands for task lifecycle |
+| `scripts/claude-task-env`    | Main CLI: `up` and `down` subcommands for task lifecycle                                            |
 
 ## CLI Reference
 
@@ -125,15 +126,13 @@ Commands:
 ### up
 
 ```
-claude-task-env up [OPTIONS] TASK_ID BRANCH [REPO...]
+claude-task-env up [OPTIONS] TASK_ID [REPO...]
 
 Options:
   -h, --help        Show help
-  -c, --cores NUM   CPU cores per task (default: 16)
 
 Arguments:
   TASK_ID   Unique task identifier (must contain a number for CPU pinning)
-  BRANCH    Git branch to checkout in all worktrees
   REPO...   Additional repos beyond the defaults
 ```
 
