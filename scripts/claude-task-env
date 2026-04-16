@@ -88,7 +88,8 @@ function _cmd_up
     run mkdir -p $wt ~/.claude-tasks/
     if not test -d ~/.claude-tasks/$task_id
 				run mkdir -p ~/.claude-tasks/$task_id
-				run rsync -av ~/.claude/ ~/.claude-tasks/$task_id/
+				run rsync -a ~/.claude/ ~/.claude-tasks/$task_id/
+				run cp ~/.claude.json ~/.claude-tasks/$task_id/
 		end
 
 
