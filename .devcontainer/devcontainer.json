@@ -2,6 +2,7 @@
 	"name": "wire-task",
 	"image": "wire-devcontainer:latest",
 	"workspaceFolder": "/workspace",
+	
 	"workspaceMount": "source=${localEnv:TASK_WORKTREE},target=/workspace,type=bind",
 	"runArgs": [
 		"--name", "claude-${localEnv:TASK_ID}",
@@ -20,11 +21,13 @@
 		"source=wire-pnpm,target=/cache/pnpm,type=volume",
 		"source=wire-cargo,target=/cache/cargo,type=volume",
 		"source=${localEnv:HOME}/.claude-tasks/${localEnv:TASK_ID},target=/home/dev/.claude-task,type=bind",
-		"source=${localEnv:HOME}/.claude.json,target=/home/dev/.claude.json,type=bind,readonly"
+		"source=${localEnv:HOME}/.claude.json,target=/home/dev/.claude.json,type=bind,readonly",
+		"source=${localEnv:TASK_SOURCE_ROOT},target=${localEnv:TASK_SOURCE_ROOT},type=bind"
 	],
 	"containerEnv": {
 		"TASK_ID": "${localEnv:TASK_ID}",
 		"TASK_CPUS": "${localEnv:TASK_CPUS}",
+		"TASK_SOURCE_ROOT": "${localEnv:TASK_SOURCE_ROOT}",
 		"PATH": "/workspace/.devcontainer/bin:/cache/pnpm:/home/dev/.local/bin:/cache/nvm/versions/node/default/bin:/home/dev/.local/share/solana/install/active_release/bin:/home/dev/.foundry/bin:/cache/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 	},
 	"remoteUser": "dev"

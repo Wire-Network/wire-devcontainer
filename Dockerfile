@@ -65,9 +65,8 @@ RUN groupmod -n dev ubuntu && \
     echo "dev ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev && \
     chmod 0440 /etc/sudoers.d/dev
 
-RUN mkdir -p /cache /workspace && \
-		chown -R dev:dev /cache && \
-    chown -R dev:dev /workspace
+RUN mkdir -p /cache /workspace /data/shared/code/wire && \
+		chown -R dev:dev /cache /workspace /data/shared/code/wire
 
 USER dev
 
@@ -150,6 +149,7 @@ COPY assets/pkg/* ${PKG_CACHE_PATH}/v3.5/
 RUN echo "export PATH=${PATH}" >> ${HOME}/.profile && \
 		echo "export PATH=${PATH}" >> ${HOME}/.bashrc && \
 		echo "export PATH=${PATH}" >> ${HOME}/.config/fish/config.fish
+
 WORKDIR /workspace
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
