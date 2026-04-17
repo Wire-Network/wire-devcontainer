@@ -5,7 +5,7 @@ set -gx wireDevContainerRoot (dirname $wireClaudeTaskScriptDir)
 set -gx wireRepoRoot (realpath (dirname $wireDevContainerRoot))
 set -gx codeRoot (realpath (dirname $wireRepoRoot))
 set -gx wireTaskRoot $codeRoot/wire-tasks
-set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-e2e-tests wire-ethereum wire-solana wire-vcpkg-registry
+set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-e2e-tests wire-ethereum wire-solana wire-vcpkg-registry wire-devcontainer
 
 set -gx memTotal (math floor\( (awk '/MemTotal/ {print $2}' /proc/meminfo) / 1000 \) )
 set -gx memAvailable (math $memTotal - ceil \( $memTotal / 5 \) )
@@ -145,8 +145,12 @@ function _cmd_up
 			run cp -R $_opp_path $wt/wire-opp
 		end
 
-		mkdir -p $wt/.devcontainer
-		rsync -a $wireDevContainerRoot/.devcontainer/ $wt/.devcontainer/
+		ln -sf $wt/wire-devcontainer/CLAUDE.md $wt/CLAUDE.md
+		if test -e $wt/.devcontainer
+			echo "Warning: $wt/.devcontainer already exists, skipping copying devcontainer files"
+		else
+		  ln -sf $wt/wire-devcontainer/.devcontainer $wt/.devcontainer
+		end
 
 		cd $wireRepoRoot
     run env TASK_ID=$task_id TASK_WORKTREE=$wt TASK_CPUS=$cpuPerTask TASK_MEM=$memGBPerTask \

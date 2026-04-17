@@ -1,20 +1,35 @@
 # wire-devcontainer
 
+> NOTE: This file may be a symlink placed in the root of
+> a wire-task devcontainer. If appropriate or needed,
+> it can be modified by rfiting the sym link which can be
+> found in `/workspace/wire-devcontainer` from within the container.
+
 Containerized task isolation for parallel Claude Code sessions on Wire blockchain repos.
+## Context
 
-## First Run (Devcontainer)
+At minimum, the repositories required to run the full stack,
+all have git worktrees, under `/workspace`
 
-When running inside a fresh `wire-task` devcontainer for the first time, run from a Fish login prompt:
+- wire-sysio 
+- wire-cdt 
+- wire-libraries-ts 
+- wire-e2e-tests 
+- wire-ethereum 
+- wire-solana 
+- wire-vcpkg-registry 
+- wire-devcontainer
+
+### Setup (Devcontainer)
+
+To use any of the code in the `devcontainer`,
+your must first run the following:
 
 ```fish
 devcontainer-e2e-build
 ```
 
-This is already on `$PATH`. It builds all native dependencies (wire-cdt, wire-sysio) and links all local TypeScript packages. Only needed once per fresh container.
-
-## What This Repo Is
-
-A Docker-based development environment + Fish shell CLI (`claude-task-env`) that creates isolated git worktrees per task and launches devcontainers with pinned resources and shared build caches.
+> NOTE: This is already on `$PATH`. It builds all native dependencies (wire-cdt, wire-sysio) and links all local TypeScript packages. Only needed once per fresh container.
 
 ## Repo Structure
 
