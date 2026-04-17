@@ -12,7 +12,11 @@ set -gx wireRepoRoot (realpath (dirname $wireDevContainerRoot))
 set -gx wireOPPRoot $wireRepoRoot/wire-opp
 
 set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-e2e-tests wire-ethereum wire-solana wire-vcpkg-registry
-set -gx cpuCount (math floor\( 2 \*  (cat /proc/cpuinfo | grep -c processor) / 3\) )
+
+if not set -q TASK_CPUS
+		set -gx TASK_CPUS 4
+end
+set -gx cpuCount $TASK_CPUS
 
 function die
     echo "$argv[1]"

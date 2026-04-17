@@ -24,6 +24,7 @@
 	],
 	"containerEnv": {
 		"TASK_ID": "${localEnv:TASK_ID}",
+		"TASK_CPUS": "${localEnv:TASK_CPUS}",
 		"PATH": "/workspace/.devcontainer/bin:/cache/pnpm:/home/dev/.local/bin:/cache/nvm/versions/node/default/bin:/home/dev/.local/share/solana/install/active_release/bin:/home/dev/.foundry/bin:/cache/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 	},
 	"remoteUser": "dev"
