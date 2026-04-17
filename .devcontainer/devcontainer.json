@@ -6,10 +6,12 @@
 	"runArgs": [
 		"--name", "claude-${localEnv:TASK_ID}",
 		"--init",
-		"--cpuset-cpus", "${localEnv:TASK_CPUS}",
-		"--memory", "32g",
-		"--pids-limit", "4096",
-		"--security-opt", "no-new-privileges",
+		"--cpus", "${localEnv:TASK_CPUS}",
+		"--memory", "${localEnv:TASK_MEM}g",
+		"--pids-limit", "1048576",
+		"--security-opt", "seccomp=unconfined",
+		"--security-opt", "apparmor=unconfined",
+		"--security-opt", "label=disable",
 		"--tmpfs", "/tmp:exec,size=8g"
 	],
 	"mounts": [
@@ -22,7 +24,7 @@
 	],
 	"containerEnv": {
 		"TASK_ID": "${localEnv:TASK_ID}",
-		"PATH": "/cache/pnpm:/home/dev/.local/bin:/cache/nvm/versions/node/default/bin:/home/dev/.local/share/solana/install/active_release/bin:/home/dev/.foundry/bin:/cache/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+		"PATH": "/workspace/.devcontainer/bin:/cache/pnpm:/home/dev/.local/bin:/cache/nvm/versions/node/default/bin:/home/dev/.local/share/solana/install/active_release/bin:/home/dev/.foundry/bin:/cache/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 	},
 	"remoteUser": "dev"
 }

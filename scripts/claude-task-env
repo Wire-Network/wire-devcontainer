@@ -6,7 +6,27 @@ set -gx wireRepoRoot (realpath (dirname $wireDevContainerRoot))
 set -gx codeRoot (realpath (dirname $wireRepoRoot))
 set -gx wireTaskRoot $codeRoot/wire-tasks
 set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-e2e-tests wire-ethereum wire-solana wire-vcpkg-registry
-set -gx cpuCount 16
+
+set -gx memTotal (math floor\( (awk '/MemTotal/ {print $2}' /proc/meminfo) / 1000 \) )
+set -gx memAvailable (math $memTotal - ceil \( $memTotal / 5 \) )
+
+set -gx cpuTotal (cat /proc/cpuinfo | grep -c processor)
+set -gx cpuAvailable (math $cpuTotal - ceil \( $cpuTotal / 5 \) )
+
+if test $cpuAvailable -ge 96
+		echo "High CPU count detected ($cpuAvailable), capping max tasks at 4.
+		 NOTE: Keep this to ~4 to avoid OOM issues."
+		set -gx maxTasks 4
+else
+		echo "CPU count detected: $cpuAvailable, setting max tasks to 2."
+		set -gx maxTasks 2
+end
+set -gx cpuPerTask (math ceil\( $cpuAvailable / $maxTasks \) )
+set -gx memPerTask (math ceil\( $memAvailable / $maxTasks \) )
+set -gx memGBPerTask (math floor\( $memPerTask / 1024 \) )
+
+
+
 
 function die
     echo "$argv[1]"
@@ -125,14 +145,13 @@ function _cmd_up
 			run cp -R $_opp_path $wt/wire-opp
 		end
 
-		if not test -d $wt/.devcontainer
-			cp -R $wireDevContainerRoot/.devcontainer $wt/.devcontainer
-		end
+		mkdir -p $wt/.devcontainer
+		rsync -a $wireDevContainerRoot/.devcontainer/ $wt/.devcontainer/
 
 		cd $wireRepoRoot
-    run env TASK_ID=$task_id TASK_WORKTREE=$wt TASK_CPUS=$cpuCount \
+    run env TASK_ID=$task_id TASK_WORKTREE=$wt TASK_CPUS=$cpuPerTask TASK_MEM=$memGBPerTask \
         devcontainer up --workspace-folder $wt
-    run env TASK_ID=$task_id TASK_WORKTREE=$wt TASK_CPUS=$cpuCount \
+    run env TASK_ID=$task_id TASK_WORKTREE=$wt TASK_CPUS=$cpuPerTask TASK_MEM=$memGBPerTask \
         devcontainer exec --workspace-folder $wt claude --permission-mode bypassPermissions
 end
 

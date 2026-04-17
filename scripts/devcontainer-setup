@@ -7,6 +7,8 @@ set -gx codeRoot (realpath (dirname $wireRepoRoot))
 set -gx wireTaskRoot $codeRoot/wire-tasks
 set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-e2e-tests wire-ethereum wire-solana wire-vcpkg-registry
 
+set -gx cpuCount (math floor\( 2 \*  (cat /proc/cpuinfo | grep -c processor) / 3\) )
+
 function die
     echo "$argv[1]"
     exit 255

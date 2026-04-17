@@ -1,0 +1,128 @@
+#!/usr/bin/env fish
+
+if not set -q IN_DEVCONTAINER || not set -q WIRE_WORKSPACE || not set -q CC || not set -q CXX  
+    echo "This script is meant to be run inside the devcontainer. Please run './scripts/devcontainer-setup' first."
+    exit 255
+end
+
+set -gx WIRE_PREFIX $HOME/.local
+set -gx wireDevContainerBinDir (dirname (realpath (status filename)))
+set -gx wireDevContainerRoot (dirname $wireDevContainerBinDir)
+set -gx wireRepoRoot (realpath (dirname $wireDevContainerRoot))
+set -gx wireOPPRoot $wireRepoRoot/wire-opp
+
+set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-e2e-tests wire-ethereum wire-solana wire-vcpkg-registry
+set -gx cpuCount (math floor\( 2 \*  (cat /proc/cpuinfo | grep -c processor) / 3\) )
+
+function die
+    echo "$argv[1]"
+    exit 255
+end
+
+function run
+    set cmd $argv
+    eval "$cmd"; or die "An error occurred while executing: $cmd"
+end
+
+function set-default
+    set newValue $argv[1]
+    set -q $newValue
+    and echo $newValue
+    or echo $argv[2]
+end
+
+function set-or-default
+    set newValue $argv[1]
+    if test -z $newValue
+        set $newValue $argv[2]
+    end
+end
+
+run npm i -g @protobuf-ts/plugin
+run pnpm i -g @protobuf-ts/plugin
+
+run pushd $wireRepoRoot/wire-libraries-ts
+
+run find $PKG_CACHE_PATH && pnpm install --no-frozen-lockfile
+run pnpm run build
+
+# Build the protoc plugin binaries (dist = compile + bundle + pkg binary).
+# These are needed by wire-protobuf-bundler to generate OPP models.
+run cd $wireRepoRoot/wire-libraries-ts/packages/protoc-gen-solidity && pnpm run dist  && pnpm link --global
+run cd $wireRepoRoot/wire-libraries-ts/packages/protoc-gen-solana && pnpm run dist  && pnpm link --global
+run cd $wireRepoRoot/wire-libraries-ts/packages/protobuf-bundler && pnpm run dist && pnpm link --global
+
+for p in shared shared-node shared-web sdk-core
+  run cd $wireRepoRoot/wire-libraries-ts/packages/$p
+  run pnpm link --global
+end
+
+popd
+
+run pushd $wireRepoRoot/wire-cdt
+run ./vcpkg/bootstrap-vcpkg.sh
+
+run cmake \
+      -G Ninja \
+      -DENABLE_CCACHE=ON \
+      -DENABLE_DISTCC=OFF \
+      -DENABLE_TESTS=ON \
+      -DCMAKE_TOOLCHAIN_FILE=$PWD/vcpkg/scripts/buildsystems/vcpkg.cmake \
+      -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+      -DCMAKE_BUILD_TYPE=Debug \
+      -DCMAKE_MAKE_PROGRAM=(which ninja) \
+      -DCMAKE_C_COMPILER=$CC \
+      -DCMAKE_CXX_COMPILER=$CXX \
+      -DCMAKE_INSTALL_PREFIX=$WIRE_PREFIX \
+      -DCMAKE_PREFIX_PATH=$WIRE_PREFIX \
+      -DCMAKE_PARALLEL_LEVEL=$cpuCount \
+      -S . \
+      -B build/debug
+
+
+
+run cmake --build build/debug -j$cpuCount --target all
+run cmake --install build/debug
+popd
+
+
+
+run pushd $wireRepoRoot/wire-sysio
+run ./vcpkg/bootstrap-vcpkg.sh
+
+run cmake \
+      -G Ninja \
+      -DENABLE_CCACHE=ON \
+      -DENABLE_DISTCC=OFF \
+      -DENABLE_TESTS=ON \
+      -DBUILD_SYSTEM_CONTRACTS=ON \
+      -DBUILD_TEST_CONTRACTS=ON \
+      -DCMAKE_TOOLCHAIN_FILE=$PWD/vcpkg/scripts/buildsystems/vcpkg.cmake \
+      -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+      -DCMAKE_BUILD_TYPE=Debug \
+      -DCMAKE_C_COMPILER=$CC \
+      -DCMAKE_CXX_COMPILER=$CXX \
+      -DCMAKE_MAKE_PROGRAM=(which ninja) \
+      -DCMAKE_INSTALL_PREFIX=$WIRE_PREFIX \
+      -DCMAKE_PREFIX_PATH=$WIRE_PREFIX/cdt \
+      -DCMAKE_PARALLEL_LEVEL=$cpuCount \
+      -S . \
+      -B build/debug
+
+run cmake --build build/debug -j$cpuCount --target all
+# run cmake --install build/debug
+popd
+
+if test -d $wireOPPRoot/typescript -a -d $wireOPPRoot/solidity
+    run cd $wireOPPRoot/typescript 
+    run pnpm i --no-frozen-lockfile
+    run pnpm link --global 
+    run npm link 
+		run cd $wireOPPRoot/solidity
+		run pnpm i --no-frozen-lockfile
+		run pnpm link --global
+    run npm link
+  end
+
+
+

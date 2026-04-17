@@ -105,10 +105,30 @@ The `wire-devcontainer:latest` image (Ubuntu 24.04) includes:
 
 ## Scripts
 
-| Script                       | Purpose                                                                                             |
-|------------------------------|-----------------------------------------------------------------------------------------------------|
-| `scripts/devcontainer-setup` | One-time setup: validates repos, builds Docker image, symlinks `claude-task-env` to `~/.local/bin/` |
-| `scripts/claude-task-env`    | Main CLI: `up` and `down` subcommands for task lifecycle                                            |
+| Script                            | Purpose                                                                                             |
+|-----------------------------------|-----------------------------------------------------------------------------------------------------|
+| `scripts/devcontainer-setup`      | One-time setup: validates repos, builds Docker image, symlinks `claude-task-env` to `~/.local/bin/` |
+| `scripts/claude-task-env`         | Main CLI: `up` and `down` subcommands for task lifecycle                                            |
+| `scripts/devcontainer-e2e-build`  | In-container full build: compiles wire-cdt, wire-sysio, wire-libraries-ts, and links all packages   |
+
+## In-Container Init/Build/Setup
+
+After spinning up a fresh `wire-task` devcontainer, run the full build/link script from a Fish prompt:
+
+```fish
+devcontainer-e2e-build
+```
+
+This script (Fish, requires `IN_DEVCONTAINER` env):
+
+1. Installs `@protobuf-ts/plugin` globally
+2. Builds `wire-libraries-ts` and creates `pnpm link --global` for shared packages (`sdk-core`, `shared`, `shared-node`, `shared-web`)
+3. Builds and globally links the protoc plugins (`protoc-gen-solidity`, `protoc-gen-solana`, `protobuf-bundler`)
+4. Configures and compiles `wire-cdt` (CMake + Ninja, installs to `~/.local`)
+5. Configures and compiles `wire-sysio` (CMake + Ninja, with system contracts)
+6. Links `wire-opp` TypeScript and Solidity model packages if present
+
+Only needed once per fresh container -- build caches (`ccache`, `vcpkg`) persist across containers via shared Docker volumes.
 
 ## CLI Reference
 

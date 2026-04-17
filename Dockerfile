@@ -28,12 +28,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libgmp-dev \
       liblzma-dev \
       libncurses5-dev \
+      libssl-dev \
       libstdc++-14-dev \
+      libc++-dev \
+    	libc++-18-dev \
       libusb-1.0-0-dev \
       libzstd-dev \
       zlib1g-dev \
+    	libclang-dev \
       llvm-18 \
+    	llvm-18-dev \
+	    llvm-18-tools \
+	    llvm-18-runtime \
       clang-18 \
+    	clang-tools-18 \
       libclang-18-dev \
       ninja-build \
       pkg-config \
@@ -52,15 +60,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       zip \
       ca-certificates
 
-ARG UID=1000
-ARG GID=1000
-RUN echo "UID=$UID user: $(getent passwd $UID | cut -d: -f1)" && \
-    echo "GID=$GID group: $(getent group $GID | cut -d: -f1)" && \
-    useradd -m -o -u $UID -g $GID -s /usr/bin/fish dev
+RUN groupmod -n dev ubuntu && \
+    usermod -l dev -d /home/dev -m -s /usr/bin/fish ubuntu && \
+    echo "dev ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev && \
+    chmod 0440 /etc/sudoers.d/dev
 
 RUN mkdir -p /cache /workspace && \
-		chown -R dev:ubuntu /cache && \
-    chown -R dev:ubuntu /workspace
+		chown -R dev:dev /cache && \
+    chown -R dev:dev /workspace
 
 USER dev
 
@@ -108,7 +115,7 @@ ENV PATH="${HOME}/.local/share/solana/install/active_release/bin:${PATH}"
 # -- Node.js 24 via nvm + pnpm --
 
 RUN mkdir -p ${NVM_DIR} ${PNPM_HOME} \
-		&& chown -R ${USER}:ubuntu ${NVM_DIR} ${PNPM_HOME}
+		&& chown -R ${USER}:dev ${NVM_DIR} ${PNPM_HOME}
 RUN bash -c 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash \
     && source "${NVM_DIR}/nvm.sh" \
     && nvm install 24.14.1 \
@@ -116,9 +123,10 @@ RUN bash -c 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/insta
     && ln -s "${NVM_DIR}/versions/node/$(nvm version default)" "${NVM_DIR}/versions/node/default"'
 
 ENV PATH="${NVM_DIR}/versions/node/default/bin:${PATH}"
-
+ENV PATH="${PNPM_HOME}:${PATH}"
+ENV PATH="/workspace/.devcontainer/bin:${PATH}"
+ENV PATH="${HOME}/.local/cdt/bin:${HOME}/.local/bin:${PATH}"
 # Set up pnpm global bin directory
-ENV PATH="${PNPM_HOME}:${HOME}/.local/bin:${PATH}"
 ENV SHELL="/usr/bin/fish"
 RUN npm install -g @anthropic-ai/claude-code pnpm tsc typescript@6
 RUN pnpm setup || true

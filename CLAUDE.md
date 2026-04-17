@@ -2,6 +2,16 @@
 
 Containerized task isolation for parallel Claude Code sessions on Wire blockchain repos.
 
+## First Run (Devcontainer)
+
+When running inside a fresh `wire-task` devcontainer for the first time, run from a Fish login prompt:
+
+```fish
+devcontainer-e2e-build
+```
+
+This is already on `$PATH`. It builds all native dependencies (wire-cdt, wire-sysio) and links all local TypeScript packages. Only needed once per fresh container.
+
 ## What This Repo Is
 
 A Docker-based development environment + Fish shell CLI (`claude-task-env`) that creates isolated git worktrees per task and launches devcontainers with pinned resources and shared build caches.
@@ -34,6 +44,21 @@ Both scripts are Fish shell. They share a common preamble that resolves paths:
 ### devcontainer-setup
 
 Run once to validate the environment. Checks all default repos exist, builds the Docker image if missing, creates the task root, and symlinks `claude-task-env` into `~/.local/bin/`.
+
+### devcontainer-e2e-build
+
+**Must be run once inside a fresh `wire-task` devcontainer from a Fish login prompt.** Requires `IN_DEVCONTAINER`, `WIRE_WORKSPACE`, `CC`, and `CXX` env vars (all set by the container image).
+
+Performs the full build and link sequence:
+
+1. Installs `@protobuf-ts/plugin` globally (npm + pnpm)
+2. Builds `wire-libraries-ts` and globally links shared packages (`sdk-core`, `shared`, `shared-node`, `shared-web`)
+3. Builds + globally links protoc plugins (`protoc-gen-solidity`, `protoc-gen-solana`, `protobuf-bundler`) via `pnpm run dist`
+4. Bootstraps vcpkg, configures + compiles `wire-cdt` (CMake/Ninja, installs to `~/.local`)
+5. Bootstraps vcpkg, configures + compiles `wire-sysio` (CMake/Ninja, with system + test contracts)
+6. Links `wire-opp` TypeScript and Solidity model packages if present
+
+Uses `ccache` and `vcpkg` shared caches, so subsequent runs (or runs in new containers with the same volumes) are fast.
 
 ### claude-task-env
 
