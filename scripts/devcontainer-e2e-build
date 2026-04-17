@@ -16,7 +16,7 @@ set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-e2e-tests wi
 if not set -q TASK_CPUS
 		set -gx TASK_CPUS 4
 end
-set -gx cpuCount $TASK_CPUS
+set -gx cpuCount (math ceil\( $TASK_CPUS / 2 \) )
 
 function die
     echo "$argv[1]"
@@ -117,16 +117,31 @@ run cmake --build build/debug -j$cpuCount --target all
 # run cmake --install build/debug
 popd
 
-if test -d $wireOPPRoot/typescript -a -d $wireOPPRoot/solidity
-    run cd $wireOPPRoot/typescript 
-    run pnpm i --no-frozen-lockfile
-    run pnpm link --global 
-    run npm link 
-		run cd $wireOPPRoot/solidity
-		run pnpm i --no-frozen-lockfile
-		run pnpm link --global
-    run npm link
-  end
+if not test -d $wireOPPRoot/typescript -a -d $wireOPPRoot/solidity
+	die "ERROR: wire-opp bundles not generated"
+end
 
+echo "wire-opp bundles found, proceeding with installation/linking"
+run cd $wireOPPRoot/typescript
+run pnpm i --no-frozen-lockfile
+run pnpm link --global
+run npm link
+run cd $wireOPPRoot/solidity
+run pnpm i --no-frozen-lockfile
+run pnpm link --global
+run npm link
 
+echo "Building & Linking wire-ethereum"
+run cd $wireRepoRoot/wire-ethereum
+run npm i
+run npm run build
+run npx hardhat compile
 
+echo "Building & Linking wire-e2e-tests"
+run cd $wireRepoRoot/wire-e2e-tests
+run pnpm i --no-frozen-lockfile
+run pnpm run build
+run pushd $wireRepoRoot/wire-e2e-tests/packages/harness
+run pnpm link --global
+run pushd $wireRepoRoot/wire-e2e-tests/packages/debugging-server
+run pnpm link --global

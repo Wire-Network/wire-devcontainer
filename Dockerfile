@@ -126,12 +126,18 @@ ENV PATH="${NVM_DIR}/versions/node/default/bin:${PATH}"
 ENV PATH="${PNPM_HOME}:${PATH}"
 ENV PATH="/workspace/.devcontainer/bin:${PATH}"
 ENV PATH="${HOME}/.local/cdt/bin:${HOME}/.local/bin:${PATH}"
-# Set up pnpm global bin directory
+
 ENV SHELL="/usr/bin/fish"
+
+# CLAUDE CODE
+# NOTE: The official install script for Claude Code doesn't work well in a non-interactive environment, so we install it via npm instead. The `pnpm setup`
+# command is required to set up the necessary configuration files for Claude Code.
 RUN npm install -g @anthropic-ai/claude-code pnpm tsc typescript@6
+
+# PNPM SETUP
 RUN pnpm setup || true
 
-#RUN curl -fsSL https://claude.ai/install | bash
+
 
 
 # SETUP PKG_CACHE_PATH FOR `@yao-pkg/pkg` & `pkg`
