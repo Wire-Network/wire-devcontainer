@@ -123,23 +123,29 @@ end
 
 echo "wire-opp bundles found, proceeding with installation/linking"
 run cd $wireOPPRoot/typescript
-run pnpm i --no-frozen-lockfile
+run pnpm i --force --no-frozen-lockfile
 run pnpm link --global
 run npm link
 run cd $wireOPPRoot/solidity
-run pnpm i --no-frozen-lockfile
+run pnpm i --force --no-frozen-lockfile
 run pnpm link --global
 run npm link
 
 echo "Building & Linking wire-ethereum"
 run cd $wireRepoRoot/wire-ethereum
 run npm i
+run npm link @wireio/opp-solidity-models
 run npm run build
 run npx hardhat compile
 
 echo "Building & Linking wire-e2e-tests"
 run cd $wireRepoRoot/wire-e2e-tests
-run pnpm i --no-frozen-lockfile
+run pnpm i --force --no-frozen-lockfile
+run pnpm link @wireio/opp-typescript-models
+run pnpm link @wireio/shared
+run pnpm link @wireio/shared-node
+run pnpm link @wireio/shared-web
+run pnpm link @wireio/sdk-core
 run pnpm run build
 run pushd $wireRepoRoot/wire-e2e-tests/packages/harness
 run pnpm link --global
