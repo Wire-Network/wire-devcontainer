@@ -145,11 +145,12 @@ function _cmd_up
 			run cp -R $_opp_path $wt/wire-opp
 		end
 
-		ln -sf $wt/wire-devcontainer/CLAUDE.md $wt/CLAUDE.md
-		if test -e $wt/.devcontainer
+		pushd $wt
+		ln -sf ./wire-devcontainer/CLAUDE.md ./CLAUDE.md
+		if test -e .devcontainer
 			echo "Warning: $wt/.devcontainer already exists, skipping copying devcontainer files"
 		else
-		  ln -sf $wt/wire-devcontainer/.devcontainer $wt/.devcontainer
+		  ln -sf ./wire-devcontainer/.devcontainer ./.devcontainer
 		end
 
 		cd $wireRepoRoot
