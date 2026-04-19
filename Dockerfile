@@ -55,8 +55,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libtool \
       sudo \
       tar \
+    	tmux \
       unzip \
       vim \
+    	xclip \
       zip \
       ca-certificates
 
@@ -151,6 +153,16 @@ RUN echo "export PATH=${PATH}" >> ${HOME}/.profile && \
 		echo "export PATH=${PATH}" >> ${HOME}/.config/fish/config.fish
 
 WORKDIR /workspace
+
+ARG HUGGING_FACE_HUB_TOKEN_ARG=""
+ENV HUGGING_FACE_HUB_TOKEN="${HUGGING_FACE_HUB_TOKEN_ARG}"
+RUN if [[ "${HUGGING_FACE_HUB_TOKEN}" != "" ]]; then; curl -fsSL https://raw.githubusercontent.com/FarhanAliRaza/claude-context-local/main/scripts/install.sh | bash && \
+	claude mcp add code-search \
+    --scope user -- \
+    uv run --directory \
+    ~/.local/share/claude-context-local \
+    python mcp_server/server.py; \
+fi
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["fish"]

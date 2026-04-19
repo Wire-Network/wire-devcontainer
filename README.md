@@ -111,25 +111,6 @@ The `wire-devcontainer:latest` image (Ubuntu 24.04) includes:
 | `scripts/claude-task-env`         | Main CLI: `up` and `down` subcommands for task lifecycle                                            |
 | `scripts/devcontainer-e2e-build`  | In-container full build: compiles wire-cdt, wire-sysio, wire-libraries-ts, and links all packages   |
 
-## In-Container Init/Build/Setup
-
-After spinning up a fresh `wire-task` devcontainer, run the full build/link script from a Fish prompt:
-
-```fish
-devcontainer-e2e-build
-```
-
-This script (Fish, requires `IN_DEVCONTAINER` env):
-
-1. Installs `@protobuf-ts/plugin` globally
-2. Builds `wire-libraries-ts` and creates `pnpm link --global` for shared packages (`sdk-core`, `shared`, `shared-node`, `shared-web`)
-3. Builds and globally links the protoc plugins (`protoc-gen-solidity`, `protoc-gen-solana`, `protobuf-bundler`)
-4. Configures and compiles `wire-cdt` (CMake + Ninja, installs to `~/.local`)
-5. Configures and compiles `wire-sysio` (CMake + Ninja, with system contracts)
-6. Links `wire-opp` TypeScript and Solidity model packages if present
-
-Only needed once per fresh container -- build caches (`ccache`, `vcpkg`) persist across containers via shared Docker volumes.
-
 ## CLI Reference
 
 ```
@@ -167,3 +148,56 @@ Options:
 Arguments:
   TASK_ID   Task identifier to tear down
 ```
+
+## Build devcontainer image w/options
+
+The base image is built automatically by `devcontainer-setup`, but you can also build it manually with
+optional features:
+
+```fish
+# Basic build (no code search)
+docker build --progress=plain --network=host -t wire-devcontainer:latest .
+
+# With Claude Code Search (semantic code search MCP tool)
+docker build --progress=plain --network=host \
+  --build-arg HUGGING_FACE_HUB_TOKEN_ARG=hf_XXXXXXXXXXXXXXXX \
+  -t wire-devcontainer:latest .
+```
+
+When `HUGGING_FACE_HUB_TOKEN_ARG` is provided, the build installs
+[claude-context-local](https://github.com/FarhanAliRaza/claude-context-local) and registers the
+`code-search` MCP tool for Claude Code. This gives Claude semantic code search across your workspace
+using the `google/embeddinggemma-300m` embedding model.
+
+### Hugging Face authentication
+
+The embedding model requires accepting terms on Hugging Face before the token can download it:
+
+1. **Accept model terms** — visit <https://huggingface.co/google/embeddinggemma-300m> and accept
+   the license
+2. **Create an access token** — go to <https://huggingface.co/settings/tokens> and create a token
+   (read access is sufficient)
+3. Pass the token as the `HUGGING_FACE_HUB_TOKEN_ARG` build arg (shown above)
+
+After the first successful download (~1.2–2 GB), the model is cached inside the image and
+subsequent container starts load it offline.
+
+## Quick Start Build/Setup/Init
+
+1. Launch a devcontainer, via `claude-task-env up <task-id>`
+2. (this will be automated shortly) Start a fish shell inside the container (`docker exec -it claude-<task-id> fish`) and run:
+
+```fish
+devcontainer-e2e-build
+```
+
+This script (Fish, requires `IN_DEVCONTAINER` env):
+
+1. Installs `@protobuf-ts/plugin` globally
+2. Builds `wire-libraries-ts` and creates `pnpm link --global` for shared packages (`sdk-core`, `shared`, `shared-node`, `shared-web`)
+3. Builds and globally links the protoc plugins (`protoc-gen-solidity`, `protoc-gen-solana`, `protobuf-bundler`)
+4. Configures and compiles `wire-cdt` (CMake + Ninja, installs to `~/.local`)
+5. Configures and compiles `wire-sysio` (CMake + Ninja, with system contracts)
+6. Links `wire-opp` TypeScript and Solidity model packages if present
+
+Only needed once per fresh container -- build caches (`ccache`, `vcpkg`) persist across containers via shared Docker volumes.

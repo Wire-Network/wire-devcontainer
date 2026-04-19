@@ -154,23 +154,28 @@ function _cmd_up
 		end
 
 		cd $wireRepoRoot
-    set cmd env \
-                  TASK_ID=$task_id \
-                  TASK_WORKTREE=$wt \
-                  TASK_CPUS=$cpuPerTask \
-                  TASK_MEM=$memGBPerTask \
-                  TASK_SOURCE_ROOT=$wireRepoRoot \
-                    devcontainer up --workspace-folder $wt
-    echo "Launching devcontainer with command: $cmd"
-    run $cmd
 
-    run env \
-      TASK_ID=$task_id \
-      TASK_WORKTREE=$wt \
-      TASK_CPUS=$cpuPerTask \
-      TASK_MEM=$memGBPerTask \
-      TASK_SOURCE_ROOT=$wireRepoRoot \
-        devcontainer exec --workspace-folder $wt claude --permission-mode bypassPermissions
+    function run_in_devcontainer
+      set -l cmd env \
+            TASK_ID=$task_id \
+            TASK_WORKTREE=$wt \
+            TASK_CPUS=$cpuPerTask \
+            TASK_MEM=$memGBPerTask \
+            TASK_SOURCE_ROOT=$wireRepoRoot \
+              devcontainer $argv
+       echo "Running devcontainer command: $cmd"
+			 run $cmd
+		end
+
+		function run_exec_in_devcontainer
+          run_in_devcontainer exec --workspace-folder $wt \
+            $argv
+		end
+
+    run_in_devcontainer up --workspace-folder $wt
+    run_exec_in_devcontainer devcontainer-e2e-build
+    run_exec_in_devcontainer claude --permission-mode bypassPermissions
+
 end
 
 function _cmd_down
