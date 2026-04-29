@@ -9,7 +9,7 @@ set -gx WIRE_PREFIX $HOME/.local
 set -gx wireDevContainerBinDir (dirname (realpath (status filename)))
 set -gx wireDevContainerRoot (dirname $wireDevContainerBinDir)
 set -gx wireRepoRoot (realpath (dirname $wireDevContainerRoot))
-set -gx wireOPPRoot $wireRepoRoot/wire-opp
+set -gx wireOPPRoot $wireRepoRoot/wire-sysio/build/opp
 
 set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-e2e-tests wire-ethereum wire-solana wire-vcpkg-registry
 
@@ -45,24 +45,6 @@ end
 run npm i -g @protobuf-ts/plugin
 run pnpm i -g @protobuf-ts/plugin
 
-run pushd $wireRepoRoot/wire-libraries-ts
-
-run find $PKG_CACHE_PATH && pnpm install --no-frozen-lockfile
-run pnpm run build
-
-# Build the protoc plugin binaries (dist = compile + bundle + pkg binary).
-# These are needed by wire-protobuf-bundler to generate OPP models.
-run cd $wireRepoRoot/wire-libraries-ts/packages/protoc-gen-solidity && pnpm run dist  && pnpm link --global
-run cd $wireRepoRoot/wire-libraries-ts/packages/protoc-gen-solana && pnpm run dist  && pnpm link --global
-run cd $wireRepoRoot/wire-libraries-ts/packages/protobuf-bundler && pnpm run dist && pnpm link --global
-
-for p in shared shared-node shared-web sdk-core
-  run cd $wireRepoRoot/wire-libraries-ts/packages/$p
-  run pnpm link --global
-end
-
-popd
-
 run pushd $wireRepoRoot/wire-cdt
 run ./vcpkg/bootstrap-vcpkg.sh
 
@@ -83,14 +65,11 @@ run cmake \
       -S . \
       -B build/debug
 
-
-
 run cmake --build build/debug -j$cpuCount --target all
 run cmake --install build/debug
 popd
 
-
-
+# Build wire-sysio
 run pushd $wireRepoRoot/wire-sysio
 run ./vcpkg/bootstrap-vcpkg.sh
 
@@ -99,6 +78,7 @@ run cmake \
       -DENABLE_CCACHE=ON \
       -DENABLE_DISTCC=OFF \
       -DENABLE_TESTS=ON \
+      -DBUILD_OPP_BUNDLES=ON \
       -DBUILD_SYSTEM_CONTRACTS=ON \
       -DBUILD_TEST_CONTRACTS=ON \
       -DCMAKE_TOOLCHAIN_FILE=$PWD/vcpkg/scripts/buildsystems/vcpkg.cmake \
@@ -114,7 +94,7 @@ run cmake \
       -B build/debug
 
 run cmake --build build/debug -j$cpuCount --target all
-# run cmake --install build/debug
+
 popd
 
 if not test -d $wireOPPRoot/typescript -a -d $wireOPPRoot/solidity
@@ -124,12 +104,29 @@ end
 echo "wire-opp bundles found, proceeding with installation/linking"
 run cd $wireOPPRoot/typescript
 run pnpm i --force --no-frozen-lockfile
-run pnpm link --global
 run npm link
 run cd $wireOPPRoot/solidity
 run pnpm i --force --no-frozen-lockfile
-run pnpm link --global
 run npm link
+
+# Build and install wire-libraries-ts
+echo "Building & Linking wire-libraries-ts"
+run pushd $wireRepoRoot/wire-libraries-ts
+
+run pnpm install --no-frozen-lockfile
+run pnpm run build
+run pnpm install
+
+run popd
+
+echo "Building & Linking wire-e2e-tests"
+run cd $wireRepoRoot/wire-e2e-tests
+run pnpm i --force --no-frozen-lockfile
+run pnpm run build
+run pushd $wireRepoRoot/wire-e2e-tests/packages/test-cluster-tool
+run pnpm link --global
+run pushd $wireRepoRoot/wire-e2e-tests/packages/debugging-server
+run pnpm link --global
 
 echo "Building & Linking wire-ethereum"
 run cd $wireRepoRoot/wire-ethereum
@@ -138,16 +135,7 @@ run npm link @wireio/opp-solidity-models
 run npm run build
 run npx hardhat compile
 
-echo "Building & Linking wire-e2e-tests"
-run cd $wireRepoRoot/wire-e2e-tests
-run pnpm i --force --no-frozen-lockfile
-run pnpm link @wireio/opp-typescript-models
-run pnpm link @wireio/shared
-run pnpm link @wireio/shared-node
-run pnpm link @wireio/shared-web
-run pnpm link @wireio/sdk-core
-run pnpm run build
-run pushd $wireRepoRoot/wire-e2e-tests/packages/harness
-run pnpm link --global
-run pushd $wireRepoRoot/wire-e2e-tests/packages/debugging-server
-run pnpm link --global
+echo "Building & Linking wire-solana"
+run cd $wireRepoRoot/wire-solana
+run cargo build
+

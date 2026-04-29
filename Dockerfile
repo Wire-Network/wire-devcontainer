@@ -156,12 +156,13 @@ WORKDIR /workspace
 
 ARG HUGGING_FACE_HUB_TOKEN_ARG=""
 ENV HUGGING_FACE_HUB_TOKEN="${HUGGING_FACE_HUB_TOKEN_ARG}"
-RUN if [[ "${HUGGING_FACE_HUB_TOKEN}" != "" ]]; then; curl -fsSL https://raw.githubusercontent.com/FarhanAliRaza/claude-context-local/main/scripts/install.sh | bash && \
-	claude mcp add code-search \
-    --scope user -- \
-    uv run --directory \
-    ~/.local/share/claude-context-local \
-    python mcp_server/server.py; \
+RUN if [[ "${HUGGING_FACE_HUB_TOKEN}" != "" ]]; then; \
+    curl -fsSL https://raw.githubusercontent.com/FarhanAliRaza/claude-context-local/main/scripts/install.sh | bash && \
+		claude mcp add code-search \
+	    --scope user -- \
+	    uv run --directory \
+	    ~/.local/share/claude-context-local \
+	    python mcp_server/server.py; \
 fi
 
 ENTRYPOINT ["/usr/bin/tini", "--"]

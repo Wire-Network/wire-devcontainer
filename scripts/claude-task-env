@@ -129,21 +129,16 @@ function _cmd_up
 				set -l repo_branch \
 					(git -C $repo_path symbolic-ref --short HEAD 2> /dev/null || \
 					git -C $repo_path show-ref --head -s --abbrev | head -n1 2> /dev/null)
-				echo "repo $r: '$repo_branch'"
-				run git -C $repo_path worktree add -f $wt/$r $repo_branch
+				set -l task_repo_branch feature/task-$task_id
+				echo "repo $r branch=$repo_branch -> task_branch=$task_repo_branch"
+				run git -C $repo_path worktree add -f $wt/$r $task_repo_branch
 
         # initialize submodules if present
         if test -f $wt/$r/.gitmodules
             echo "Initializing submodules for $r..."
             run git -C $wt/$r submodule update --init --recursive
         end
-
     end
-
-    set _opp_path $wireRepoRoot/wire-opp
-		if test -d $_opp_path
-			run cp -R $_opp_path $wt/wire-opp
-		end
 
 		pushd $wt
 		ln -sf ./wire-devcontainer/CLAUDE.md ./CLAUDE.md
