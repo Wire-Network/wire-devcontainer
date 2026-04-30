@@ -1,4 +1,4 @@
-../wire-e2e-tests/node_modules/
+node_modules/
 .git/
 lib/
 build/
@@ -9,7 +9,6 @@ coverage/
 .claude*
 .remember/
 *.tsbuildinfo
-wire-opp-session-01.claude.txt
 .env
 .env.*
 docs/

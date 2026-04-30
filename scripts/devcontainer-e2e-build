@@ -11,7 +11,7 @@ set -gx wireDevContainerRoot (dirname $wireDevContainerBinDir)
 set -gx wireRepoRoot (realpath (dirname $wireDevContainerRoot))
 set -gx wireOPPRoot $wireRepoRoot/wire-sysio/build/opp
 
-set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-e2e-tests wire-ethereum wire-solana wire-vcpkg-registry
+set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-tools-ts wire-ethereum wire-solana wire-vcpkg-registry
 
 if not set -q TASK_CPUS
 		set -gx TASK_CPUS 4
@@ -119,13 +119,14 @@ run pnpm install
 
 run popd
 
-echo "Building & Linking wire-e2e-tests"
-run cd $wireRepoRoot/wire-e2e-tests
-run pnpm i --force --no-frozen-lockfile
+echo "Building & Linking wire-tools-ts"
+run cd $wireRepoRoot/wire-tools-ts
+run pnpm install --force --no-frozen-lockfile
 run pnpm run build
-run pushd $wireRepoRoot/wire-e2e-tests/packages/test-cluster-tool
+run pnpm install
+run pushd $wireRepoRoot/wire-tools-ts/packages/test-cluster-tool
 run pnpm link --global
-run pushd $wireRepoRoot/wire-e2e-tests/packages/debugging-server
+run pushd $wireRepoRoot/wire-tools-ts/packages/debugging-server
 run pnpm link --global
 
 echo "Building & Linking wire-ethereum"

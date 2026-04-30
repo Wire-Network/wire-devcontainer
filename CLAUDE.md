@@ -14,7 +14,7 @@ all have git worktrees, under `/workspace`
 - wire-sysio 
 - wire-cdt 
 - wire-libraries-ts 
-- wire-e2e-tests 
+- wire-tools-ts 
 - wire-ethereum 
 - wire-solana 
 - wire-vcpkg-registry 
@@ -36,7 +36,7 @@ devcontainer-e2e-build
 ```
 wire-devcontainer/
   Dockerfile                    # Main devcontainer image (Ubuntu 24.04)
-  wire-e2e-tests.Dockerfile     # Multi-stage build for e2e test cluster (separate concern)
+  wire-tools-ts.Dockerfile     # Multi-stage build for e2e test cluster (separate concern)
   .devcontainer/
     devcontainer.json           # Container config: mounts, resources, env
   scripts/
@@ -88,7 +88,7 @@ CLI with `up` and `down` subcommands. Uses Fish `argparse` for option parsing.
 Always included in every task (defined in `_wireDefaultRepos`):
 
 ```
-wire-sysio wire-cdt wire-libraries-ts wire-e2e-tests wire-ethereum wire-solana wire-vcpkg-registry
+wire-sysio wire-cdt wire-libraries-ts wire-tools-ts wire-ethereum wire-solana wire-vcpkg-registry
 ```
 
 Extra repos can be passed as positional args to `up`. Duplicates are filtered.

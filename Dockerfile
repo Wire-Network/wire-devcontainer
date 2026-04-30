@@ -138,9 +138,6 @@ RUN npm install -g @anthropic-ai/claude-code pnpm tsc typescript@6
 # PNPM SETUP
 RUN pnpm setup || true
 
-
-
-
 # SETUP PKG_CACHE_PATH FOR `@yao-pkg/pkg` & `pkg`
 ENV PKG_CACHE_PATH=${HOME}/.pkg-cache
 RUN mkdir -p ${PKG_CACHE_PATH}/v3.5/ && \

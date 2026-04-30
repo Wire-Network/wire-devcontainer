@@ -5,7 +5,7 @@ set -gx wireDevContainerRoot (dirname $wireClaudeTaskScriptDir)
 set -gx wireRepoRoot (realpath (dirname $wireDevContainerRoot))
 set -gx codeRoot (realpath (dirname $wireRepoRoot))
 set -gx wireTaskRoot $codeRoot/wire-tasks
-set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-e2e-tests wire-ethereum wire-solana wire-vcpkg-registry
+set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-tools-ts wire-ethereum wire-solana wire-vcpkg-registry
 
 set -gx cpuCount (math floor\( 2 \*  (cat /proc/cpuinfo | grep -c processor) / 3\) )
 

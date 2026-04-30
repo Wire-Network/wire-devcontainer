@@ -9,7 +9,7 @@ gets its own git worktrees and devcontainer while sharing build caches across ta
 - Fish shell
 - [devcontainer CLI](https://github.com/devcontainers/cli) (`npm install -g @devcontainers/cli`)
 - All required Wire repos cloned as siblings under the same parent directory:
-    - `wire-sysio`, `wire-cdt`, `wire-libraries-ts`, `wire-e2e-tests`
+    - `wire-sysio`, `wire-cdt`, `wire-libraries-ts`, `wire-tools-ts`
     - `wire-ethereum`, `wire-solana`, `wire-vcpkg-registry`
     - `wire-opp` (optional, is not a repo, but rather a generated artifact for OPP Protobufs, copied into worktree if
       present, generated otherwise)
@@ -38,7 +38,7 @@ claude-task-env down task-1
     wire-sysio/               # sibling repos
     wire-cdt/
     wire-libraries-ts/
-    wire-e2e-tests/
+    wire-tools-ts/
     wire-ethereum/
     wire-solana/
     wire-vcpkg-registry/
