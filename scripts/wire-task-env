@@ -1,0 +1,248 @@
+#!/usr/bin/env fish
+
+set -gx wireTaskScriptDir (dirname (realpath (status filename)))
+set -gx wireDevContainerRoot (dirname $wireTaskScriptDir)
+set -gx wireRepoRoot (realpath (dirname $wireDevContainerRoot))
+set -gx codeRoot (realpath (dirname $wireRepoRoot))
+set -gx wireTaskRoot $codeRoot/wire-tasks
+set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-tools-ts wire-ethereum wire-solana wire-vcpkg-registry wire-devcontainer
+
+set -gx memTotal (math floor\( (awk '/MemTotal/ {print $2}' /proc/meminfo) / 1000 \) )
+set -gx memAvailable (math $memTotal - ceil \( $memTotal / 5 \) )
+
+set -gx cpuTotal (cat /proc/cpuinfo | grep -c processor)
+set -gx cpuAvailable (math $cpuTotal - ceil \( $cpuTotal / 5 \) )
+
+if test $cpuAvailable -ge 96
+		echo "High CPU count detected ($cpuAvailable), capping max tasks at 4."
+		echo "NOTE: Keep this to ~4 to avoid OOM issues."
+		set -gx maxTasks 4
+else
+		echo "CPU count detected: $cpuAvailable, setting max tasks to 2."
+		set -gx maxTasks 2
+end
+
+set -gx cpuPerTask (math ceil\( $cpuAvailable / $maxTasks \) )
+set -gx memPerTask (math ceil\( $memAvailable / $maxTasks \) )
+set -gx memGBPerTask (math floor\( $memPerTask / 1024 \) )
+
+function die
+    echo "$argv[1]"
+    exit 255
+end
+
+function run
+    set cmd $argv
+    eval "$cmd"; or die "An error occurred while executing: $cmd"
+end
+
+function set-default
+    set newValue $argv[1]
+    set -q $newValue
+    and echo $newValue
+    or echo $argv[2]
+end
+
+function set-or-default
+    set newValue $argv[1]
+    if test -z $newValue
+        set $newValue $argv[2]
+    end
+end
+
+function _usage
+    echo "Usage: wire-task-env [OPTIONS] COMMAND [ARGS...]"
+    echo ""
+    echo "Manage wire task worktrees and devcontainers."
+    echo ""
+    echo "Options:"
+    echo "  -h, --help   Show this help"
+    echo ""
+    echo "Commands:"
+    echo "  up     Create worktrees and launch a wire task in a devcontainer"
+    echo "  down   Tear down a wire task and remove its worktrees"
+end
+
+function _cmd_up
+    argparse -n 'wire-task-env up' 'h/help' 'c/cores=!_validate_int --min 1' -- $argv
+    or return 1
+
+    if set -q _flag_help
+        echo "Usage: wire-task-env up [OPTIONS] TASK_ID BRANCH [REPO...]"
+        echo ""
+        echo "Create worktrees and launch a wire task in a devcontainer."
+        echo ""
+        echo "Options:"
+        echo "  -h, --help        Show this help"
+        echo ""
+        echo "Arguments:"
+        echo "  TASK_ID   Unique identifier for the task"
+        echo "  REPO...   Additional repos (always includes: $_wireDefaultRepos)"
+        return 0
+    end
+
+    if test (count $argv) -lt 1
+        echo "Error: TASK_ID is required"
+        echo "Run 'wire-task-env up --help' for usage"
+        return 1
+    end
+
+    set -l task_id $argv[1]
+    set -l extra_repos $argv[2..-1]
+
+    # merge default + extra repos, deduplicate
+    set -l all_repos
+    for r in $_wireDefaultRepos $extra_repos
+        if not contains -- $r $all_repos
+            set -a all_repos $r
+        end
+    end
+
+    set -l wt $wireTaskRoot/$task_id
+    echo "Setting up
+    taskd_id=$task_id
+    repos: $all_repos
+    worktree=$wt"
+    run mkdir -p $wt
+
+    for r in $all_repos
+        set -l repo_path $wireRepoRoot/$r
+        echo "Adding $r from $repo_path to worktree..."
+        if not test -d $repo_path
+            echo "Warning: repo $repo_path does not exist, skipping"
+            exit 1
+        end
+
+				if test -d $wt/$r
+					echo "Worktree for $r already exists, skipping git worktree add"
+					continue
+				end
+
+				set -l repo_branch \
+					(git -C $repo_path symbolic-ref --short HEAD 2> /dev/null || \
+					git -C $repo_path show-ref --head -s --abbrev | head -n1 2> /dev/null)
+				set -l task_repo_branch feature/task-$task_id
+				echo "repo $r branch=$repo_branch -> task_branch=$task_repo_branch"
+				run git -C $repo_path worktree add -f $wt/$r $task_repo_branch
+
+        # initialize submodules if present
+        if test -f $wt/$r/.gitmodules
+            echo "Initializing submodules for $r..."
+            run git -C $wt/$r submodule update --init --recursive
+        end
+    end
+
+		pushd $wt
+		ln -sf ./wire-devcontainer/CLAUDE.md ./CLAUDE.md
+		if test -e .devcontainer
+			echo "Warning: $wt/.devcontainer already exists, skipping copying devcontainer files"
+		else
+		  ln -sf ./wire-devcontainer/.devcontainer ./.devcontainer
+		end
+
+		cd $wireRepoRoot
+
+    function run_in_devcontainer
+      set -l cmd env \
+            TASK_ID=$task_id \
+            TASK_WORKTREE=$wt \
+            TASK_CPUS=$cpuPerTask \
+            TASK_MEM=$memGBPerTask \
+            TASK_SOURCE_ROOT=$wireRepoRoot \
+              devcontainer $argv
+       echo "Running devcontainer command: $cmd"
+			 run $cmd
+		end
+
+		function run_exec_in_devcontainer
+          run_in_devcontainer exec --workspace-folder $wt \
+            $argv
+		end
+
+    run_in_devcontainer up --workspace-folder $wt
+    run_exec_in_devcontainer devcontainer-e2e-build
+    run_exec_in_devcontainer fish
+
+end
+
+function _cmd_down
+    argparse -n 'wire-task-env down' 'h/help' -- $argv
+    or return 1
+
+    if set -q _flag_help
+        echo "Usage: wire-task-env down [OPTIONS] TASK_ID"
+        echo ""
+        echo "Tear down a wire task and remove its worktrees."
+        echo ""
+        echo "Options:"
+        echo "  -h, --help   Show this help"
+        echo ""
+        echo "Arguments:"
+        echo "  TASK_ID   Identifier of the task to tear down"
+        return 0
+    end
+
+    if test (count $argv) -lt 1
+        echo "Error: TASK_ID is required"
+        echo "Run 'wire-task-env down --help' for usage"
+        return 1
+    end
+
+    set -l task_id $argv[1]
+    set -l wt $wireTaskRoot/$task_id
+    run docker rm -f wire-$task_id 2>/dev/null
+    for d in $wt/*
+        if not test -d $wireRepoRoot/(basename $d)/.git
+						echo "Warning: $d is not a git worktree, skipping"
+						continue
+				end
+        run git -C (readlink -f $wireRepoRoot/(basename $d)) worktree remove --force $d
+    end
+
+end
+
+# --- main entrypoint ---
+
+echo "wire-task-env:
+codeRoot=$codeRoot
+wireRepoRoot=$wireRepoRoot
+wireTaskRoot=$wireTaskRoot"
+
+if not test -x (which docker)
+    die "Error: Docker is not installed or not in PATH"
+end
+
+if not test (docker images --quiet wire-devcontainer | wc -l) -gt 0
+    pushd $wireDevContainerRoot
+    run docker build --progress=plain --network=host-t wire-devcontainer:latest .
+    popd
+end
+
+run mkdir -p $wireTaskRoot
+if not test -d $wireTaskRoot
+    echo "Error: wireTaskRoot $wireTaskRoot does not exist or is not a directory."
+    exit 1
+end
+
+# parse top-level flags, leaving the command + its args in $argv
+argparse -n wire-task-env -s 'h/help' -- $argv
+or exit 1
+
+if set -q _flag_help; or test (count $argv) -eq 0
+    _usage
+    exit 0
+end
+
+set -l cmd $argv[1]
+set -l cmd_argv $argv[2..-1]
+
+switch $cmd
+    case up
+        _cmd_up $cmd_argv
+    case down
+        _cmd_down $cmd_argv
+    case '*'
+        echo "Error: unknown command '$cmd'"
+        _usage
+        exit 1
+end

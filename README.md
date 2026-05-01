@@ -1,5 +1,11 @@
-# wire-devcontainer
+# wire-devcontainer & other dev tools
 
+# LOCAL Dev Setup
+
+Use the [LOCAL_SETUP_GUIDE.md](./LOCAL_SETUP_GUIDE.md) to setup your local environment.
+
+
+# DEVCONTAINER Dev Setup
 Containerized, isolated environments for running parallel Claude Code sessions against Wire blockchain repos. Each task
 gets its own git worktrees and devcontainer while sharing build caches across tasks.
 

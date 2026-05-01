@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
 
-set -gx wireClaudeTaskScriptDir (dirname (realpath (status filename)))
-set -gx wireDevContainerRoot (dirname $wireClaudeTaskScriptDir)
+set -gx wireTaskScriptDir (dirname (realpath (status filename)))
+set -gx wireDevContainerRoot (dirname $wireTaskScriptDir)
 set -gx wireRepoRoot (realpath (dirname $wireDevContainerRoot))
 set -gx codeRoot (realpath (dirname $wireRepoRoot))
 set -gx wireTaskRoot $codeRoot/wire-tasks
@@ -69,8 +69,11 @@ if not test -d $wireTaskRoot
 end
 
 mkdir -p $HOME/.local/bin
+ln -sf $wireDevContainerRoot/scripts/wire-task-env $HOME/.local/bin/wire-task-env
+echo "Created symlink for wire-task-env at $HOME/.local/bin/wire-task-env"
+
 ln -sf $wireDevContainerRoot/scripts/claude-task-env $HOME/.local/bin/claude-task-env
 echo "Created symlink for claude-task-env at $HOME/.local/bin/claude-task-env"
 
 ln -sf $wireDevContainerRoot/.devcontainer $wireRepoRoot/.devcontainer
-echo "All required repos are present and Docker is available. You can now run `claude-task-env`"
+echo "All required repos are present and Docker is available. You can now run `wire-task-env` or `claude-task-env"

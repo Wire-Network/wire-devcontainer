@@ -72,7 +72,19 @@ popd
 # Build wire-sysio
 run pushd $wireRepoRoot/wire-sysio
 run ./vcpkg/bootstrap-vcpkg.sh
-
+run mkdir -p build/opp
+run pushd ./libraries/opp/tools
+run pnpm install
+run pnpm --filter "proto*" dist
+run pushd protoc-gen-solidity && run pnpm link --global && popd
+run pushd protoc-gen-solana && run pnpm link --global && popd
+run pushd protobuf-bundler && run pnpm link --global && popd
+run which wire-protobuf-bundler
+run which protoc-gen-solana
+run which protoc-gen-solidity
+run echo "wire-protobuf-bundler,protoc-gen-solana,protoc-gen-solidity are on the PATH"
+run ./scripts/generate-opp-bundles.fish
+run popd
 run cmake \
       -G Ninja \
       -DENABLE_CCACHE=ON \
