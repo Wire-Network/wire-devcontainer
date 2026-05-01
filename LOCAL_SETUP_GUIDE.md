@@ -57,6 +57,35 @@ $WIRE_ROOT/
 └── wire-solana/
 ```
 
+### Quick Dev/Test Cluster
+
+Once you've run the script successfully, you can start a local cluster
+with the following commands:
+
+```bash 
+# Replace <wire-repo-clone-root> with the path to the Wire repo clone root.
+source "<wire-repo-clone-root>/.env"
+
+# Replace <wire-repo-clone-root> with the path to the Wire repo clone root.
+wire-test-cluster \
+  --cluster-path=$HOME/.local/share/wire/chains/dev-001 \
+  --force \
+    create \
+    --build-path=<wire-repo-clone-root>/wire-sysio/build/debug \
+    --prod-count=5 \
+    --pnodes=1 \
+    --batch-operators=3 \
+    --underwriters=1 \
+    --epoch-duration=60 \
+    --ethereum-path=<wire-repo-clone-root>/wire-ethereum \
+    --solana-path=<wire-repo-clone-root>/wire-solana \
+  && wire-test-cluster \
+    --cluster-path=$HOME/.local/share/wire/chains/dev-001 run
+
+
+```
+
+
 ## Prerequisites
 
 The script fails fast if any of these are missing on `PATH`:
