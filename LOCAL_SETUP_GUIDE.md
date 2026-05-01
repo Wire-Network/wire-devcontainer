@@ -22,11 +22,11 @@ to clone the Wire repos into.
 
 # Example using `https` for git urls:
 curl -fsSL https://raw.githubusercontent.com/Wire-Network/wire-devcontainer/master/scripts/wire-local-setup.bash \
-  | bash -s -- "<wire-repo-clone-root>"
+  | bash -s -- "$HOME/code/wire"
   
 # Example using `ssh` for git urls:
 curl -fsSL https://raw.githubusercontent.com/Wire-Network/wire-devcontainer/master/scripts/wire-local-setup.bash \
-  | bash -s -- --git-ssh "<wire-repo-clone-root>"  
+  | bash -s -- --git-ssh "$HOME/code/wire"  
 ```
 
 If you've already cloned `wire-devcontainer` you can just run the script
@@ -37,10 +37,10 @@ locally:
 # ./scripts/wire-local-setup.bash [--git-ssh] "<wire-repo-clone-root>"
 
 # Example using `https` for git urls:
-./scripts/wire-local-setup.bash "<wire-repo-clone-root>"
+./scripts/wire-local-setup.bash "$HOME/code/wire"
 
 # Example using `ssh` for git urls:
-./scripts/wire-local-setup.bash --git-ssh "<wire-repo-clone-root>"
+./scripts/wire-local-setup.bash --git-ssh "$HOME/code/wire"
 ```
 
 A successful run leaves you with this layout under `WIRE_ROOT`:
@@ -63,25 +63,41 @@ Once you've run the script successfully, you can start a local cluster
 with the following commands:
 
 ```bash 
-# Replace <wire-repo-clone-root> with the path to the Wire repo clone root.
-source "<wire-repo-clone-root>/.env"
+## Usage:
+## Replace <wire-repo-clone-root> with the path to the Wire repo clone root.
+# source "<wire-repo-clone-root>/.env"
+# wire-test-cluster \
+#  --cluster-path=$HOME/.local/share/wire/chains/dev-001 \
+#  --force \
+#    create \
+#    --build-path=<wire-repo-clone-root>/wire-sysio/build/debug \
+#    --prod-count=5 \
+#    --pnodes=1 \
+#    --batch-operators=3 \
+#    --underwriters=1 \
+#    --epoch-duration=60 \
+#    --ethereum-path=<wire-repo-clone-root>/wire-ethereum \
+#    --solana-path=<wire-repo-clone-root>/wire-solana \
+#  && wire-test-cluster \
+#    --cluster-path=$HOME/.local/share/wire/chains/dev-001 run
 
-# Replace <wire-repo-clone-root> with the path to the Wire repo clone root.
+# Example with `$HOME/code/wire` as the Wire repo clone root:
+source "$HOME/code/wire/.env"
+
 wire-test-cluster \
   --cluster-path=$HOME/.local/share/wire/chains/dev-001 \
   --force \
     create \
-    --build-path=<wire-repo-clone-root>/wire-sysio/build/debug \
+    --build-path=$HOME/code/wire/wire-sysio/build/debug \
     --prod-count=5 \
     --pnodes=1 \
     --batch-operators=3 \
     --underwriters=1 \
     --epoch-duration=60 \
-    --ethereum-path=<wire-repo-clone-root>/wire-ethereum \
-    --solana-path=<wire-repo-clone-root>/wire-solana \
+    --ethereum-path=$HOME/code/wire/wire-ethereum \
+    --solana-path=$HOME/code/wire/wire-solana \
   && wire-test-cluster \
     --cluster-path=$HOME/.local/share/wire/chains/dev-001 run
-
 
 ```
 
