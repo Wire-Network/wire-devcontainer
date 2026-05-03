@@ -4,6 +4,38 @@
 
 Use the [LOCAL_SETUP_GUIDE.md](./LOCAL_SETUP_GUIDE.md) to setup your local environment.
 
+The setup is driven by [`scripts/wire-local-setup.bash`](./scripts/wire-local-setup.bash), which
+takes a single positional argument `WIRE_ROOT` (the directory every Wire repo will live under)
+plus a few optional flags:
+
+| Flag             | Default        | Effect                                                                                                                                                              |
+|------------------|----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--git-ssh`      | _off_ (HTTPS)  | Clone via `git@github.com:Wire-Network/<repo>.git` instead of HTTPS.                                                                                                |
+| `--skip-apt`     | _off_          | Skip both `apt-get install` steps. Use on already-provisioned hosts (CI images, prior runs).                                                                        |
+| `--skip-clone`   | _off_          | Don't clone — verify every Wire repo already exists under `WIRE_ROOT`. Missing repos are listed on stderr and the script exits non-zero.                            |
+| `-h`, `--help`   | —              | Print usage and exit.                                                                                                                                                |
+
+The rust + foundry + solana + avm install block is **automatically skipped** when every tool
+it provides (`cargo`, `rustc`, `forge`, `anvil`, `cast`, `solana`, `solana-test-validator`,
+`avm`, `anchor`) is already on `PATH`. There's no flag for this — the script probes `command
+-v` for each name and only installs when something is missing.
+
+Examples:
+
+```bash
+# Fresh setup over HTTPS
+./scripts/wire-local-setup.bash "$HOME/code/wire"
+
+# Fresh setup over SSH (when the host is configured for SSH-based GitHub auth)
+./scripts/wire-local-setup.bash --git-ssh "$HOME/code/wire"
+
+# Re-run on a fully-provisioned host with all repos already present
+./scripts/wire-local-setup.bash --skip-apt --skip-clone "$HOME/code/wire"
+```
+
+See [LOCAL_SETUP_GUIDE.md](./LOCAL_SETUP_GUIDE.md) for the full step-by-step walkthrough,
+prerequisites, and troubleshooting.
+
 
 # DEVCONTAINER Dev Setup
 Containerized, isolated environments for running parallel Claude Code sessions against Wire blockchain repos. Each task

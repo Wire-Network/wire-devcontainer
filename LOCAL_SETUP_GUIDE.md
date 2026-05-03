@@ -8,25 +8,30 @@ script: [`scripts/wire-local-setup.bash`](./scripts/wire-local-setup.bash).
 
 ## Quick Start
 
-The script accepts a single positional argument: `WIRE_ROOT`, the directory
-everything will be cloned and built under. It must be empty (or not yet
-exist) — the script refuses to clobber an existing checkout.
+The script takes one required positional argument — `WIRE_ROOT`, the
+directory every Wire repo will live under — plus a few optional flags that
+let you tailor the run to your machine's state. See the [Flags](#flags)
+section below for the full reference.
 
-Replace `<wire-repo-clone-root>` with the path to a directory where you want
-to clone the Wire repos into.
+Replace `<wire-repo-clone-root>` with the path to the directory you want
+the Wire repos cloned into.
 
 ```bash
 # Usage:
 # curl -fsSL https://raw.githubusercontent.com/Wire-Network/wire-devcontainer/master/scripts/wire-local-setup.bash \
-#  | bash -s -- [--git-ssh] "<wire-repo-clone-root>"
+#   | bash -s -- [--git-ssh] [--skip-apt] [--skip-clone] "<wire-repo-clone-root>"
 
 # Example using `https` for git urls:
 curl -fsSL https://raw.githubusercontent.com/Wire-Network/wire-devcontainer/master/scripts/wire-local-setup.bash \
   | bash -s -- "$HOME/code/wire"
-  
+
 # Example using `ssh` for git urls:
 curl -fsSL https://raw.githubusercontent.com/Wire-Network/wire-devcontainer/master/scripts/wire-local-setup.bash \
-  | bash -s -- --git-ssh "$HOME/code/wire"  
+  | bash -s -- --git-ssh "$HOME/code/wire"
+
+# Example skipping apt + verifying clones already exist (CI / fully-provisioned host):
+curl -fsSL https://raw.githubusercontent.com/Wire-Network/wire-devcontainer/master/scripts/wire-local-setup.bash \
+  | bash -s -- --skip-apt --skip-clone "$HOME/code/wire"
 ```
 
 If you've already cloned `wire-devcontainer` you can just run the script
@@ -34,14 +39,38 @@ locally:
 
 ```bash
 # Usage:
-# ./scripts/wire-local-setup.bash [--git-ssh] "<wire-repo-clone-root>"
+# ./scripts/wire-local-setup.bash [--git-ssh] [--skip-apt] [--skip-clone] "<wire-repo-clone-root>"
 
 # Example using `https` for git urls:
 ./scripts/wire-local-setup.bash "$HOME/code/wire"
 
 # Example using `ssh` for git urls:
 ./scripts/wire-local-setup.bash --git-ssh "$HOME/code/wire"
+
+# Example: verify repos already exist and skip apt + toolchain installation
+./scripts/wire-local-setup.bash --skip-apt --skip-clone "$HOME/code/wire"
 ```
+
+## Flags
+
+| Flag           | Default       | What it does                                                                                                                                                                                                                                                                                       |
+|----------------|---------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--git-ssh`    | _off_ (HTTPS) | Switches the GitHub URL prefix from `https://github.com/Wire-Network/<repo>.git` to `git@github.com:Wire-Network/<repo>.git`. Use when your machine is set up to push/pull via SSH and HTTPS would prompt for credentials. Selected transport is logged at startup.                                  |
+| `--skip-apt`   | _off_         | Skips both `apt-get install` steps (the bootstrap packages and the full build/runtime toolchain). Use on hosts that are already provisioned (CI images, prior runs, customized base images). The `sudo` / `run_apt` setup is also skipped, so the script no longer needs root for this phase.        |
+| `--skip-clone` | _off_         | Instead of cloning, verifies that every repo in `WIRE_REPOS` already exists as a git checkout under `WIRE_ROOT`. If any are missing, prints `[wire-local-setup][error] --skip-clone set but the following repos are missing under <WIRE_ROOT>:` followed by the missing repo names to stderr and exits non-zero. |
+| `-h`, `--help` | —             | Prints usage and exits 0.                                                                                                                                                                                                                                                                          |
+
+> **Note**
+> Flags are parsed up-front (before the OS check, apt install, and nvm
+> bootstrap), so `--help` works even if the host is not Ubuntu 24.04 and
+> `--skip-apt` is honored before the script ever asks for `sudo`.
+
+In addition to these flags, the rust + foundry + solana + avm install
+section is **automatically skipped** when every tool it provides
+(`cargo`, `rustc`, `forge`, `anvil`, `cast`, `solana`,
+`solana-test-validator`, `avm`, `anchor`) is already resolvable on the
+current `PATH`. If any one is missing, the full set is installed. There is
+no flag to control this — the check is implicit.
 
 A successful run leaves you with this layout under `WIRE_ROOT`:
 
@@ -141,41 +170,42 @@ they're unset:
 
 ## What the Script Does, Step by Step
 
-### 0. Validate `WIRE_ROOT` and prepare directories
+### 0. Resolve `WIRE_ROOT` and prepare directories
 
 ```bash
 mkdir -p "${WIRE_ROOT_ARG}"
 WIRE_ROOT="$(cd "${WIRE_ROOT_ARG}" && pwd)"
 
-# Reject any pre-existing content (including dotfiles).
-shopt -s dotglob nullglob
-existing_entries=( "${WIRE_ROOT}"/* )
-shopt -u dotglob nullglob
-[[ ${#existing_entries[@]} -eq 0 ]] || die "WIRE_ROOT (${WIRE_ROOT}) is not empty"
-
 export WIRE_PREFIX="${WIRE_ROOT}/local-prefix"
 mkdir -p "${WIRE_PREFIX}"
 ```
 
-If `WIRE_ROOT` contains anything (visible or hidden), the script aborts with
-`WIRE_ROOT (...) is not empty`. This is deliberate — re-running into a
-half-built tree silently is worse than failing loudly. To restart, delete
-or rename the directory and invoke again.
+`WIRE_ROOT` is created if missing and resolved to an absolute path. The
+script is idempotent at the per-repo level (`clone_repo` skips and `git pull`s
+existing checkouts), so re-running into an existing tree is safe. If you
+explicitly want to assert that nothing has been cloned yet, pair `--skip-clone`
+with a fresh directory — the verification step will fail with a list of
+missing repos.
 
-### 1. Clone every Wire repo
+### 1. Clone every Wire repo (or verify them with `--skip-clone`)
 
-Each clone is wrapped in a helper that skips the clone if the target
-already contains a `.git` directory (lets you safely re-run after fixing a
-mid-script failure without re-downloading).
+The clone helper picks the URL prefix from `--git-ssh` (HTTPS by default,
+SSH when set) and skips/`git pull`s targets that already have a `.git`
+directory — re-runs after a mid-script failure don't re-download.
 
 ```bash
-clone_repo "https://github.com/Wire-Network/wire-libraries-ts.git" "wire-libraries-ts"
-clone_repo "https://github.com/Wire-Network/wire-tools-ts.git"     "wire-tools-ts"
-clone_repo "https://github.com/Wire-Network/wire-ethereum.git"     "wire-ethereum" "feature/protobufs-for-opp"
-clone_repo "https://github.com/Wire-Network/wire-solana.git"       "wire-solana"   "feature/opp-solana-outpost-integration"
-clone_repo "https://github.com/Wire-Network/wire-cdt.git"          "wire-cdt"
-clone_repo "https://github.com/Wire-Network/wire-sysio.git"        "wire-sysio"    "feature/opp-part2"
+clone_repo "${GIT_REPO_BASE}/wire-libraries-ts.git" "wire-libraries-ts"
+clone_repo "${GIT_REPO_BASE}/wire-tools-ts.git"     "wire-tools-ts"
+clone_repo "${GIT_REPO_BASE}/wire-ethereum.git"     "wire-ethereum" "feature/protobufs-for-opp"
+clone_repo "${GIT_REPO_BASE}/wire-solana.git"       "wire-solana"   "feature/opp-solana-outpost-integration"
+clone_repo "${GIT_REPO_BASE}/wire-cdt.git"          "wire-cdt"
+clone_repo "${GIT_REPO_BASE}/wire-sysio.git"        "wire-sysio"    "feature/opp-part2"
 ```
+
+When `--skip-clone` is set, the six `clone_repo` calls are replaced with
+a verification loop that walks `WIRE_REPOS=(wire-libraries-ts wire-tools-ts
+wire-ethereum wire-solana wire-cdt wire-sysio)`, prints any missing ones
+to stderr, and exits 1 if the list is non-empty.
 
 Three repos use feature branches today:
 
@@ -331,25 +361,40 @@ cargo build
 
 ## Re-Running and Troubleshooting
 
-- **`WIRE_ROOT (...) is not empty`** — by design. Either point the script
-  at a fresh directory, or delete the existing one. If you want to resume
-  a partially failed run, see the next bullet.
-- **Resuming after a mid-script failure** — `clone_repo` is idempotent (it
-  skips if `.git` exists), but the *initial* empty-check still applies
-  because it runs before any clones. To resume, comment out the
-  empty-check block in the script for that one run, fix the underlying
-  failure, and re-invoke. The cmake / pnpm / cargo steps are themselves
-  incremental and won't redo work that's already cached.
-- **Build OOMs / slow** — lower `MP_COUNT`. The default caps at the host's
-  `nproc` but native builds (especially `wire-sysio`) are memory-hungry.
+- **Resuming after a mid-script failure** — the script is idempotent at the
+  per-step level. `clone_repo` skips and `git pull`s when `.git` exists;
+  cmake / pnpm / cargo steps are incremental and won't redo cached work.
+  Just re-invoke with the same `WIRE_ROOT`. If you've already provisioned
+  the host and verified the repos in a previous run, add `--skip-apt
+  --skip-clone` to short-circuit the slow upfront work.
+- **`--skip-clone` reports missing repos** — exit code 1 with a list of
+  repo names on stderr means the script expected `${WIRE_ROOT}/<repo>/.git`
+  to exist but it didn't. Either drop `--skip-clone` so the script clones
+  them for you, or clone the missing ones manually before re-running.
+- **`unsupported OS: this script requires Ubuntu 24.04 (noble)`** — the OS
+  check is strict (matches `ID=ubuntu`, `VERSION_ID=24.04`,
+  `VERSION_CODENAME=noble`). On other distros, replicate the apt-package
+  set manually and run the build steps directly; the script itself is
+  Ubuntu-only.
+- **`running as non-root user but 'sudo' is not installed`** — install
+  `sudo` (or run as root) before re-invoking, or use `--skip-apt` if the
+  host is already provisioned.
+- **Build OOMs / slow** — lower `MP_COUNT`. The default is `nproc / 2`
+  (capped lower on small hosts), but native builds (especially
+  `wire-sysio`) are memory-hungry.
 - **Missing OPP bundles** — the script aborts with `wire-opp bundles
   missing under …` if sysio didn't emit them. Verify
   `-DBUILD_OPP_BUNDLES=ON` was honored and that
-  `wire-sysio/build/opp/{typescript,solidity}` exist after the sysio
-  build.
+  `wire-sysio/build/opp/{typescript,solidity}` exist after the sysio build.
 - **`npm link` errors** — ensure your npm prefix is writable without
   `sudo`; `pnpm setup` (or `npm config set prefix "$HOME/.npm-global"`)
   fixes most cases.
+- **Toolchain installer ran when I expected it to skip** — the rust /
+  foundry / solana / avm block runs whenever **any** of `cargo`, `rustc`,
+  `forge`, `anvil`, `cast`, `solana`, `solana-test-validator`, `avm`, or
+  `anchor` is missing from `PATH`. The script prints the missing names at
+  the start of the install block; check that list to identify which tool
+  triggered the install.
 
 ## Reference: Build Order
 

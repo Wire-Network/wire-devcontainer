@@ -42,113 +42,11 @@ function set-or-default
     end
 end
 
-run npm i -g @protobuf-ts/plugin
-run pnpm i -g @protobuf-ts/plugin
-
-run pushd $wireRepoRoot/wire-cdt
-run ./vcpkg/bootstrap-vcpkg.sh
-
-run cmake \
-      -G Ninja \
-      -DENABLE_CCACHE=ON \
-      -DENABLE_DISTCC=OFF \
-      -DENABLE_TESTS=ON \
-      -DCMAKE_TOOLCHAIN_FILE=$PWD/vcpkg/scripts/buildsystems/vcpkg.cmake \
-      -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-      -DCMAKE_BUILD_TYPE=Debug \
-      -DCMAKE_MAKE_PROGRAM=(which ninja) \
-      -DCMAKE_C_COMPILER=$CC \
-      -DCMAKE_CXX_COMPILER=$CXX \
-      -DCMAKE_INSTALL_PREFIX=$WIRE_PREFIX \
-      -DCMAKE_PREFIX_PATH=$WIRE_PREFIX \
-      -DCMAKE_PARALLEL_LEVEL=$cpuCount \
-      -S . \
-      -B build/debug
-
-run cmake --build build/debug -j$cpuCount --target all
-run cmake --install build/debug
-popd
-
-# Build wire-sysio
-run pushd $wireRepoRoot/wire-sysio
-run ./vcpkg/bootstrap-vcpkg.sh
-run mkdir -p build/opp
-run pushd ./libraries/opp/tools
-run pnpm install
-run pnpm --filter "proto*" dist
-run pushd protoc-gen-solidity && run pnpm link --global && popd
-run pushd protoc-gen-solana && run pnpm link --global && popd
-run pushd protobuf-bundler && run pnpm link --global && popd
-run which wire-protobuf-bundler
-run which protoc-gen-solana
-run which protoc-gen-solidity
-run echo "wire-protobuf-bundler,protoc-gen-solana,protoc-gen-solidity are on the PATH"
-run ./scripts/generate-opp-bundles.fish
-run popd
-run cmake \
-      -G Ninja \
-      -DENABLE_CCACHE=ON \
-      -DENABLE_DISTCC=OFF \
-      -DENABLE_TESTS=ON \
-      -DBUILD_OPP_BUNDLES=ON \
-      -DBUILD_SYSTEM_CONTRACTS=ON \
-      -DBUILD_TEST_CONTRACTS=ON \
-      -DCMAKE_TOOLCHAIN_FILE=$PWD/vcpkg/scripts/buildsystems/vcpkg.cmake \
-      -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-      -DCMAKE_BUILD_TYPE=Debug \
-      -DCMAKE_C_COMPILER=$CC \
-      -DCMAKE_CXX_COMPILER=$CXX \
-      -DCMAKE_MAKE_PROGRAM=(which ninja) \
-      -DCMAKE_INSTALL_PREFIX=$WIRE_PREFIX \
-      -DCMAKE_PREFIX_PATH=$WIRE_PREFIX/cdt \
-      -DCMAKE_PARALLEL_LEVEL=$cpuCount \
-      -S . \
-      -B build/debug
-
-run cmake --build build/debug -j$cpuCount --target all
-
-popd
-
-if not test -d $wireOPPRoot/typescript -a -d $wireOPPRoot/solidity
-	die "ERROR: wire-opp bundles not generated"
+set wireSetupScript "$wireDevContainerBinDir/wire-local-setup.bash"
+if not test -e $wireSetupScript
+	die "$wireSetupScript is missing"
 end
 
-echo "wire-opp bundles found, proceeding with installation/linking"
-run cd $wireOPPRoot/typescript
-run pnpm i --force --no-frozen-lockfile
-run npm link
-run cd $wireOPPRoot/solidity
-run pnpm i --force --no-frozen-lockfile
-run npm link
-
-# Build and install wire-libraries-ts
-echo "Building & Linking wire-libraries-ts"
-run pushd $wireRepoRoot/wire-libraries-ts
-
-run pnpm install --no-frozen-lockfile
-run pnpm run build
-run pnpm install
-
-run popd
-
-echo "Building & Linking wire-tools-ts"
-run cd $wireRepoRoot/wire-tools-ts
-run pnpm install --force --no-frozen-lockfile
-run pnpm run build
-run pnpm install
-run pushd $wireRepoRoot/wire-tools-ts/packages/test-cluster-tool
-run pnpm link --global
-run pushd $wireRepoRoot/wire-tools-ts/packages/debugging-server
-run pnpm link --global
-
-echo "Building & Linking wire-ethereum"
-run cd $wireRepoRoot/wire-ethereum
-run npm i
-run npm link @wireio/opp-solidity-models
-run npm run build
-run npx hardhat compile
-
-echo "Building & Linking wire-solana"
-run cd $wireRepoRoot/wire-solana
-run cargo build
-
+set wireSetupCmd $wireSetupScript --skip-apt --skip-clone
+echo "Starting: $wireSetupCmd"
+run $wireSetupCmd
