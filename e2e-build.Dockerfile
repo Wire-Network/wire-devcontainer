@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # =============================================================================
 # wire-test-cluster Docker Image
 #
@@ -5,8 +6,24 @@
 # wire-ethereum) and links the TypeScript harness into a single image exposing
 # the `wire-test-cluster` CLI.
 #
-# Build:
-#   docker build --memory=64g --cpu-count=16 --build-arg GITHUB_TOKEN=$(gh auth token) -t wire/dev-worktree -f wire-dev-worktree.wire-dev-worktree.Dockerfile .
+# Build (BuildKit required — `# syntax` directive above enables it). The
+# GitHub token is supplied as a BuildKit secret (id: `github_token`) and is
+# never persisted into any image layer or the resulting image:
+#
+#   # Pipe `gh auth token` straight into a build secret:
+#   GITHUB_TOKEN=$(gh auth token) docker build \
+#     --memory=64g --cpu-count=16 \
+#     --secret id=github_token,env=GITHUB_TOKEN \
+#     -t wire/dev-worktree -f e2e-build.Dockerfile .
+#
+#   # Or read from a file:
+#   docker build \
+#     --memory=64g --cpu-count=16 \
+#     --secret id=github_token,src=$HOME/.config/wire/github_token \
+#     -t wire/dev-worktree -f e2e-build.Dockerfile .
+#
+#   # If your Docker doesn't enable BuildKit by default, prefix with
+#   # `DOCKER_BUILDKIT=1` (or use `docker buildx build`).
 #
 # Run:
 #   docker run -it -wire-dev-worktree-001 \
@@ -21,21 +38,23 @@
 # ---------------------------------------------------------------------------
 # Stage 1: System base — OS packages, compilers, Rust, Foundry, Solana, Node
 # ---------------------------------------------------------------------------
-FROM ubuntu:24.04 AS base
+FROM ubuntu:24.04 AS wire-e2e-env
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CC=/usr/bin/clang-18
 ENV CXX=/usr/bin/clang++-18
-ENV MP_COUNT=14
+ARG MP_COUNT=8
+ENV MP_COUNT=${MP_COUNT}
 ENV PKG_CACHE_PATH=/root/.pkg-cache
 
-# GitHub token for private repo access (passed via --build-arg).
-# Used only during build for git clone of private repos.
-ARG GITHUB_TOKEN
-
+# GitHub token is supplied as a BuildKit secret (`--secret id=github_token`)
+# on the individual `git clone` RUN steps below — never as a build arg, and
+# never persisted into the image's git config.
+RUN sed -i 's|http://archive.ubuntu.com|http://us-east-1.ec2.archive.ubuntu.com|g' /etc/apt/sources.list.d/ubuntu.sources
 RUN apt-get update && apt-get install -y --no-install-recommends \
       lsb-release \
       wget \
+      tini \
       software-properties-common \
     && apt-get install -y \
       build-essential \
@@ -61,6 +80,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       zlib1g-dev \
       llvm-18 \
       clang-18 \
+      clang-tools-18 \
       libclang-18-dev \
       ninja-build \
       pkg-config \
@@ -78,9 +98,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       vim \
       zip \
       ca-certificates
-
-# Configure git to use HTTPS + token for all github.com clones (private repos)
-RUN git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
 
 # -- Rust (stable) --
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
@@ -138,155 +155,96 @@ ENV WIRE_PREFIX=/opt/wire/prefix
 RUN mkdir -p ${WIRE_PREFIX} ${WIRE_OPP_ROOT}
 
 WORKDIR ${WIRE_ROOT}
-RUN git clone --recursive https://github.com/Wire-Network/wire-libraries-ts.git
-RUN git clone --recursive https://github.com/Wire-Network/wire-tools-ts.git
-RUN git clone -b feature/protobufs-for-opp --recursive \
-      https://github.com/Wire-Network/wire-ethereum.git
 
-RUN git clone -b feature/opp-solana-outpost-integration --recursive \
-      https://github.com/Wire-Network/wire-solana.git
+# Clone every Wire repo in a single auth-scoped RUN.
+#
+# How auth works (and why this is safe):
+#   1. The BuildKit secret is mounted read-only at /run/secrets/github_token
+#      for the duration of *this RUN only*. After the RUN finishes the
+#      mount is gone — it is never part of any image layer.
+#   2. We read the token (stripping any stray CR/LF) into a shell variable,
+#      then set a global `url.<authed-url>.insteadOf` rewrite so any clone
+#      against `https://github.com/...` is fetched via
+#      `https://x-access-token:${TOKEN}@github.com/...`. `insteadOf` rewrites
+#      at the *network* layer; the cloned repo's `.git/config` records the
+#      original (unauthenticated) URL, so submodules and the cloned repos
+#      themselves never carry the token.
+#   3. We `--unset-all` the rewrite before the RUN exits, so /root/.gitconfig
+#      is clean in the resulting image layer. (If a clone fails mid-way the
+#      RUN itself fails, so no layer is committed at all.)
+#
+# `set -e` (via `&&` chaining) ensures any failure aborts before the unset.
 
-RUN git clone --recursive https://github.com/Wire-Network/wire-cdt.git && \
-		cd wire-cdt && \
-    ./vcpkg/bootstrap-vcpkg.sh
+ARG GIT_BRANCH_CDT=master
+ARG GIT_BRANCH_SYSIO=feature/opp-part2
+ARG GIT_BRANCH_SOLANA=feature/opp-solana-outpost-integration
+ARG GIT_BRANCH_ETHEREUM=feature/protobufs-for-opp
+ARG GIT_BRANCH_LIBRARIES_TS=master
+ARG GIT_BRANCH_TOOLS_TS=master
+RUN --mount=type=secret,id=github_token,required=true \
+    set -eu && \
+    GH_TOKEN="$(tr -d '\r\n' < /run/secrets/github_token)" && \
+    [ -n "${GH_TOKEN}" ] || { echo "github_token secret was empty" >&2; exit 1; } && \
+    INSTEAD_OF_KEY="url.https://x-access-token:${GH_TOKEN}@github.com/.insteadOf" && \
+    git config --global "${INSTEAD_OF_KEY}" "https://github.com/" && \
+    git clone -b ${GIT_BRANCH_LIBRARIES_TS} --recursive \
+    		https://github.com/Wire-Network/wire-libraries-ts.git && \
+    git clone -b ${GIT_BRANCH_TOOLS_TS} --recursive \
+    		https://github.com/Wire-Network/wire-tools-ts.git && \
+    git clone -b ${GIT_BRANCH_ETHEREUM} --recursive \
+        https://github.com/Wire-Network/wire-ethereum.git && \
+    git clone -b ${GIT_BRANCH_SOLANA} --recursive \
+        https://github.com/Wire-Network/wire-solana.git && \
+    git clone -b ${GIT_BRANCH_CDT} --recursive \
+        https://github.com/Wire-Network/wire-cdt.git && \
+    git clone -b ${GIT_BRANCH_SYSIO} --recursive \
+        https://github.com/Wire-Network/wire-sysio.git && \
+    git config --global --unset-all "${INSTEAD_OF_KEY}"
 
-RUN git clone -b feature/opp-part2 --recursive https://github.com/Wire-Network/wire-sysio.git && \
-    cd wire-sysio && \
-    ./vcpkg/bootstrap-vcpkg.sh
+ENV VCPKG_DEFAULT_BINARY_CACHE=/vcpkg-cache
+ENV VCPKG_BINARY_SOURCES="clear;files,${VCPKG_DEFAULT_BINARY_CACHE},readwrite"
 
+ENV CCACHE_DIR=/ccache \
+  CCACHE=/usr/bin/ccache \
+  CCACHE_MAXSIZE=25G \
+  CCACHE_ALLOW_SOFT_FAILURES=1 \
+  CCACHE_FALLBACK_NOT_ERROR=1
 
-# ---------------------------------------------------------------------------
-# Stage 1: Build wire-cdt
-# ---------------------------------------------------------------------------
-FROM base AS build-cdt
-
-# Global protoc-gen plugin (required by wire-libraries-ts / wire-tools-ts builds).
-RUN npm i -g @protobuf-ts/plugin && pnpm i -g @protobuf-ts/plugin
-
-WORKDIR ${WIRE_ROOT}/wire-cdt
-
-RUN cmake \
-      -G Ninja \
-      -DENABLE_CCACHE=ON \
-      -DENABLE_DISTCC=OFF \
-      -DENABLE_TESTS=ON \
-      -DCMAKE_TOOLCHAIN_FILE=$PWD/vcpkg/scripts/buildsystems/vcpkg.cmake \
-      -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-      -DCMAKE_BUILD_TYPE=Debug \
-      -DCMAKE_C_COMPILER=${CC} \
-      -DCMAKE_CXX_COMPILER=${CXX} \
-      -DCMAKE_INSTALL_PREFIX=${WIRE_PREFIX} \
-      -DCMAKE_PREFIX_PATH=${WIRE_PREFIX} \
-      -DCMAKE_PARALLEL_LEVEL=${MP_COUNT} \
-      -S . \
-      -B build/debug
-
-RUN cmake --build build/debug -j${MP_COUNT} --target all
-RUN cmake --install build/debug
-
-
-# ---------------------------------------------------------------------------
-# Stage 2: Build wire-sysio (depends on wire-cdt prefix; emits OPP bundles)
-# ---------------------------------------------------------------------------
-FROM build-cdt AS build-sysio
-
-WORKDIR ${WIRE_ROOT}/wire-sysio
-
-ENV PATH="/root/.local/share/pnpm:${PATH}"
-RUN git pull && mkdir -p build/opp && cd ./libraries/opp/tools && \
-    pnpm install &&  \
-    pnpm --filter "proto*" dist && \
-    cd protoc-gen-solidity && pnpm link --global && cd .. && \
-    cd protoc-gen-solana && pnpm link --global && cd .. && \
-    cd protobuf-bundler && pnpm link --global && cd .. && \
-    which wire-protobuf-bundler &&  \
-    which protoc-gen-solana && \
-    which protoc-gen-solidity && \
-    echo "wire-protobuf-bundler,protoc-gen-solana,protoc-gen-solidity are on the PATH"
-RUN cd ./libraries/opp/tools && ./scripts/generate-opp-bundles.fish
-RUN cmake \
-      -DENABLE_CCACHE=ON \
-      -DENABLE_DISTCC=OFF \
-      -DENABLE_TESTS=ON \
-      -DBUILD_OPP_BUNDLES=ON \
-      -DBUILD_SYSTEM_CONTRACTS=ON \
-      -DBUILD_TEST_CONTRACTS=ON \
-      -DCMAKE_TOOLCHAIN_FILE=$PWD/vcpkg/scripts/buildsystems/vcpkg.cmake \
-      -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-      -DCMAKE_BUILD_TYPE=Debug \
-    	-DCMAKE_C_COMPILER=${CC} \
-      -DCMAKE_CXX_COMPILER=${CXX} \
-      -DCMAKE_INSTALL_PREFIX=${WIRE_PREFIX} \
-      -DCMAKE_PREFIX_PATH=${WIRE_PREFIX}/cdt \
-      -DCMAKE_PARALLEL_LEVEL=${MP_COUNT} \
-      -S . \
-      -B build/debug
-
-RUN cmake --build build/debug -j${MP_COUNT} --target all
-
-# wire-opp bundles are produced by sysio's BUILD_OPP_BUNDLES target.
-# Override the base-stage WIRE_OPP_ROOT to match the sysio build output path.
-ENV WIRE_OPP_ROOT=${WIRE_ROOT}/wire-sysio/build/opp
-
-RUN test -d ${WIRE_OPP_ROOT}/typescript -a -d ${WIRE_OPP_ROOT}/solidity \
-    && cd ${WIRE_OPP_ROOT}/typescript \
-    && npm i  \
-    && npm link \
-    && cd ${WIRE_OPP_ROOT}/solidity \
-    && npm i  \
-    && npm link
+ENV	CMAKE_C_COMPILER_LAUNCHER=${CCACHE} \
+	CMAKE_CXX_COMPILER_LAUNCHER=${CCACHE}
 
 
-# ---------------------------------------------------------------------------
-# Stage 3: Build wire-libraries-ts (pnpm monorepo)
-# ---------------------------------------------------------------------------
-FROM build-sysio AS build-libraries-ts
+ENV ROOT_PREFIX=/root/.local
+ENV ROOT_BIN=${ROOT_PREFIX}/bin
 
-WORKDIR ${WIRE_ROOT}/wire-libraries-ts
+RUN for d in ${ROOT_BIN} ${CCACHE_DIR} ${VCPKG_DEFAULT_BINARY_CACHE};do \
+   echo "Checking: ${d}"; \
+    if [[ ! -d ${d} ]];then \
+    	mkdir -p ${d}; \
+    fi \
+done
 
-RUN pnpm install --no-frozen-lockfile
-RUN pnpm run build
-RUN pnpm install
+RUN ${CCACHE} -M ${CCACHE_MAXSIZE}
 
-
-# ---------------------------------------------------------------------------
-# Stage 4: Build wire-tools-ts (depends on wire-libraries-ts)
-# ---------------------------------------------------------------------------
-FROM build-libraries-ts AS build-tools-ts
-
-WORKDIR ${WIRE_ROOT}/wire-tools-ts
-
-RUN pnpm install --force --no-frozen-lockfile
-RUN pnpm run build
-RUN pnpm install
-
-RUN cd ${WIRE_ROOT}/wire-tools-ts/packages/test-cluster-tool && pnpm link --global
-RUN cd ${WIRE_ROOT}/wire-tools-ts/packages/debugging-server && pnpm link --global
-
-
-# ---------------------------------------------------------------------------
-# Stage 5: Build wire-ethereum (Hardhat contracts)
-# ---------------------------------------------------------------------------
-FROM build-tools-ts AS build-ethereum
-
-WORKDIR ${WIRE_ROOT}/wire-ethereum
-
-RUN npm i
-RUN npm link @wireio/opp-solidity-models
-RUN npm run build
-RUN npx hardhat compile
-
-
-# ---------------------------------------------------------------------------
-# Stage 6: Build wire-solana
-# ---------------------------------------------------------------------------
-FROM build-ethereum AS build-solana
-
-WORKDIR ${WIRE_ROOT}/wire-solana
-
-RUN cargo build
+# vcpkg bootstraps don't need the GitHub token (the submodules were already
+# fetched by `--recursive` above), so they run in their own RUNs without a
+# secret mount.
+RUN cd ${WIRE_ROOT}/wire-cdt   && ./vcpkg/bootstrap-vcpkg.sh
+RUN cd ${WIRE_ROOT}/wire-sysio && ./vcpkg/bootstrap-vcpkg.sh
 
 WORKDIR ${WIRE_ROOT}
 
+RUN mkdir ${ROOT_PREFIX}/bin/
+COPY scripts/wire-local-setup.bash /root/.local/bin/wire-local-setup.bash
+
+RUN --mount=type=cache,id=vcpkg-bincache,target=/vcpkg-cache,sharing=locked \
+    --mount=type=cache,id=ccache,target=/ccache,sharing=locked \
+		echo "Starting (wire-local-setup.bash)" && \
+    chmod +x /root/.local/bin/wire-local-setup.bash && \
+    /root/.local/bin/wire-local-setup.bash \
+    	--skip-apt \
+    	--skip-clone \
+      --ignore-docker \
+    	"${WIRE_ROOT}"
 ENTRYPOINT ["/usr/bin/fish"]
-#CMD ["--help"]
+

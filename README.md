@@ -37,6 +37,69 @@ See [LOCAL_SETUP_GUIDE.md](./LOCAL_SETUP_GUIDE.md) for the full step-by-step wal
 prerequisites, and troubleshooting.
 
 
+# LOCAL Docker E2E Cluster
+
+Build a self-contained `wire-e2e-env` Docker image — every Wire repo cloned, native toolchain
+compiled, OPP bundles emitted, TS/Hardhat/Solana stacks installed — then bring up an end-to-end
+test cluster from inside it. The full walkthrough lives in
+[LOCAL_DOCKER_E2E_CLUSTER_GUIDE.md](./LOCAL_DOCKER_E2E_CLUSTER_GUIDE.md); the essentials are:
+
+**1. Build** (requires a `GITHUB_TOKEN` env var with permissions to clone every Wire-Network
+repo — the token is passed as a BuildKit secret and never lands in any image layer):
+
+```bash
+export GITHUB_TOKEN=$(gh auth token)
+docker buildx build \
+  --cpu-quota=4 --memory=32g \
+  --build-arg MP_COUNT=4 \
+  --progress=plain \
+  --secret id=github_token,env=GITHUB_TOKEN \
+  --network=host \
+  -f e2e-build.Dockerfile \
+  -t wire-e2e-env:latest .
+```
+
+`--build-arg MP_COUNT=4` is optional — it controls cmake/ninja parallelism (`-j`). Bump it on
+large workstations to maximize build speed; omit it to use the default (`8`).
+
+**2. Run** the resulting image with `--privileged` (or, less invasively,
+`--security-opt seccomp=unconfined`) — `wire-test-cluster` spawns processes that need elevated
+kernel capabilities Docker's default seccomp profile blocks:
+
+```bash
+docker run --name wire-e2e-001 --privileged -it wire-e2e-env
+```
+
+**3. Bring up the cluster** from the fish shell inside the container:
+
+```bash
+export WIRE_ROOT=/opt/wire/build
+export CHAIN=/opt/wire/chains/e2e-001
+
+wire-test-cluster \
+  --cluster-path=$CHAIN \
+  --force \
+  create \
+  --build-path=$WIRE_ROOT/wire-sysio/build/debug \
+  --prod-count=5 \
+  --pnodes=1 \
+  --batch-operators=3 \
+  --underwriters=1 \
+  --epoch-duration=60 \
+  --ethereum-path=$WIRE_ROOT/wire-ethereum \
+  --solana-path=$WIRE_ROOT/wire-solana \
+  && wire-test-cluster \
+    --cluster-path=$CHAIN run
+```
+
+**4. Smoke test** — once running, watch for ~4 pairs of OPP `.data` / `.metadata` files to appear
+roughly every minute under `/opt/wire/chains/e2e-001/data/opp-debugging`. That confirms the
+operator registry, batch-operator scheduling, and consensus are all functioning end to end.
+
+See [LOCAL_DOCKER_E2E_CLUSTER_GUIDE.md](./LOCAL_DOCKER_E2E_CLUSTER_GUIDE.md) for flag-by-flag
+explanations, leak-check commands, and troubleshooting.
+
+
 # DEVCONTAINER Dev Setup
 Containerized, isolated environments for running parallel Claude Code sessions against Wire blockchain repos. Each task
 gets its own git worktrees and devcontainer while sharing build caches across tasks.

@@ -93,6 +93,7 @@ usage() {
 Usage: $(basename "$0") [--git-ssh] [--skip-apt] [--skip-clone] [-h|--help] <WIRE_ROOT>
 
   WIRE_ROOT       Directory to clone every Wire repo into.
+  --ignore-docker If docker is detected, ignore the incompatibility error.
   --git-ssh       Use SSH (git@github.com:...) URLs instead of HTTPS.
   --skip-apt      Skip the apt-get installation steps.
   --skip-clone    Verify all Wire repos already exist under WIRE_ROOT
@@ -105,6 +106,7 @@ EOF
 GIT_SSH=0
 SKIP_APT=0
 SKIP_CLONE=0
+IGNORE_DOCKER=0
 WIRE_ROOT_ARG=""
 
 while [[ $# -gt 0 ]]; do
@@ -112,6 +114,7 @@ while [[ $# -gt 0 ]]; do
     --git-ssh)    GIT_SSH=1;    shift ;;
     --skip-apt)   SKIP_APT=1;   shift ;;
     --skip-clone) SKIP_CLONE=1; shift ;;
+    --ignore-docker) IGNORE_DOCKER=1; shift ;;
     -h|--help)    usage; exit 0 ;;
     --)
       shift
@@ -145,9 +148,10 @@ fi
 
 [[ ${SKIP_APT}   -eq 1 ]] && log "--skip-apt set: apt installation will be skipped"
 [[ ${SKIP_CLONE} -eq 1 ]] && log "--skip-clone set: repos will be verified, not cloned"
+[[ ${IGNORE_DOCKER} -eq 1 ]] && log "--ignore-docker set: ignoring docker incompatibility check"
 
 # ---------------------------------------------------------------------------
-# OS check: require Ubuntu 24.04 (noble)
+# OS check: require Ubuntu 24.04 (noble) and Docker check
 # ---------------------------------------------------------------------------
 
 [[ -r /etc/os-release ]] || die "cannot read /etc/os-release — unable to verify OS"
@@ -160,6 +164,25 @@ fi
 
 log "OS check passed: ${PRETTY_NAME:-Ubuntu 24.04}"
 
+in_container() {
+  [[ -f /.dockerenv ]] && return 0
+  [[ -f /run/.containerenv ]] && return 0   # podman
+  grep -qE "(docker|containerd|buildkit|kubepods|lxc)" /proc/1/cgroup 2>/dev/null && return 0
+  grep -q 'overlay' /proc/self/mountinfo 2>/dev/null && return 0
+  if [[ -r /proc/1/comm ]]; then
+    local pid1; pid1=$(cat /proc/1/comm)
+    [[ "$pid1" != "systemd" && "$pid1" != "init" ]] && return 0
+  fi
+  return 1
+}
+
+if in_container;then
+  if [[ "${IGNORE_DOCKER}" != "1" ]]; then
+    die "Detected Docker, this script is NOT compatible with Docker or other containers, you can ignore this warning and proceed at your own risk by specifying the flag --ignore-docker"
+  else
+    log "Detected Docker, you've chosen to ignore the incompatibility by specifying --ignore-docker"
+  fi
+fi
 # ---------------------------------------------------------------------------
 # apt-get installs (mirrors the Dockerfile base stage)
 #
@@ -300,6 +323,8 @@ if [[ -z "${MP_COUNT:-}" ]]; then
   else
     MP_COUNT=4
   fi
+else
+  echo "Parallelism was provided via environment variable MP_COUNT=${MP_COUNT}"
 fi
 export MP_COUNT
 

@@ -47,6 +47,11 @@ if not test -e $wireSetupScript
 	die "$wireSetupScript is missing"
 end
 
-set wireSetupCmd $wireSetupScript --skip-apt --skip-clone
+set wireSetupCmd $wireSetupScript \
+	--skip-apt \
+	--skip-clone \
+	--ignore-docker \
+	$wireRepoRoot
+
 echo "Starting: $wireSetupCmd"
 run $wireSetupCmd
