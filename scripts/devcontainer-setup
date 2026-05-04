@@ -1,79 +1,98 @@
-#!/usr/bin/env fish
+#!/usr/bin/env bash
+# =============================================================================
+# devcontainer-setup
+#
+# Host-side setup for the wire-devcontainer workflow:
+#   - Verifies every required Wire repo is present alongside this checkout
+#   - Confirms Docker is on PATH
+#   - Builds the wire-devcontainer image (if it doesn't exist yet)
+#   - Creates the wire-tasks/ directory
+#   - Symlinks `wire-task-env` and `claude-task-env` into ~/.local/bin
+#   - Symlinks the .devcontainer directory into the parent repo root
+# =============================================================================
 
-set -gx wireTaskScriptDir (dirname (realpath (status filename)))
-set -gx wireDevContainerRoot (dirname $wireTaskScriptDir)
-set -gx wireRepoRoot (realpath (dirname $wireDevContainerRoot))
-set -gx codeRoot (realpath (dirname $wireRepoRoot))
-set -gx wireTaskRoot $codeRoot/wire-tasks
-set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-tools-ts wire-ethereum wire-solana wire-vcpkg-registry
+set -euo pipefail
 
-set -gx cpuCount (math floor\( 2 \*  (cat /proc/cpuinfo | grep -c processor) / 3\) )
+# --- path resolution ---------------------------------------------------------
 
-function die
-    echo "$argv[1]"
-    exit 255
-end
+wireTaskScriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+wireDevContainerRoot="$(dirname "${wireTaskScriptDir}")"
+wireRepoRoot="$(cd "$(dirname "${wireDevContainerRoot}")" && pwd)"
+codeRoot="$(cd "$(dirname "${wireRepoRoot}")" && pwd)"
+wireTaskRoot="${codeRoot}/wire-tasks"
 
-function run
-    set cmd $argv
-    eval "$cmd"; or die "An error occurred while executing: $cmd"
-end
+export wireTaskScriptDir wireDevContainerRoot wireRepoRoot codeRoot wireTaskRoot
 
-function set-default
-    set newValue $argv[1]
-    set -q $newValue
-    and echo $newValue
-    or echo $argv[2]
-end
+_wireDefaultRepos=(
+  wire-sysio
+  wire-cdt
+  wire-libraries-ts
+  wire-tools-ts
+  wire-ethereum
+  wire-solana
+  wire-vcpkg-registry
+)
 
-function set-or-default
-    set newValue $argv[1]
-    if test -z $newValue
-        set $newValue $argv[2]
-    end
-end
+# cpuCount = floor(2 * nproc / 3) — integer division in bash truncates,
+# which is equivalent to floor() for positive operands.
+cpuCount=$(( 2 * $(nproc) / 3 ))
+export cpuCount
 
+# --- helpers -----------------------------------------------------------------
 
-# --- main entrypoint ---
+die() {
+  echo "$1" >&2
+  exit 255
+}
 
-echo "devcontainer-setup:
-codeRoot=$codeRoot
-wireRepoRoot=$wireRepoRoot
-wireTaskRoot=$wireTaskRoot"
+run() {
+  "$@" || die "An error occurred while executing: $*"
+}
+
+# --- main entrypoint ---------------------------------------------------------
+
+cat <<EOF
+devcontainer-setup:
+codeRoot=${codeRoot}
+wireRepoRoot=${wireRepoRoot}
+wireTaskRoot=${wireTaskRoot}
+EOF
 
 # verify all default repos exist
-set -l _missingRepos
-for r in $_wireDefaultRepos
-    if not test -d $wireRepoRoot/$r
-        set -a _missingRepos $r
-    end
-end
-if test (count $_missingRepos) -gt 0
-    die "Error: missing required repos in $wireRepoRoot: $_missingRepos"
-end
+_missingRepos=()
+for r in "${_wireDefaultRepos[@]}"; do
+  if [[ ! -d "${wireRepoRoot}/${r}" ]]; then
+    _missingRepos+=("$r")
+  fi
+done
+if [[ ${#_missingRepos[@]} -gt 0 ]]; then
+  die "Error: missing required repos in ${wireRepoRoot}: ${_missingRepos[*]}"
+fi
 
-if not test -x (which docker)
-    die "Error: Docker is not installed or not in PATH"
-end
+if ! command -v docker >/dev/null 2>&1; then
+  die "Error: Docker is not installed or not in PATH"
+fi
 
-if not test (docker images --quiet wire-devcontainer | wc -l) -gt 0
-    pushd $wireDevContainerRoot
-    run docker build --progress=plain --network=host -t wire-devcontainer:latest .
-    popd
-end
+# Build the image only if it isn't already present locally.
+if [[ -z "$(docker images --quiet wire-devcontainer)" ]]; then
+  pushd "${wireDevContainerRoot}" >/dev/null
+  run docker build --progress=plain --network=host -t wire-devcontainer:latest .
+  popd >/dev/null
+fi
 
-run mkdir -p $wireTaskRoot
-if not test -d $wireTaskRoot
-    echo "Error: wireTaskRoot $wireTaskRoot does not exist or is not a directory."
-    exit 1
-end
+run mkdir -p "${wireTaskRoot}"
+if [[ ! -d "${wireTaskRoot}" ]]; then
+  echo "Error: wireTaskRoot ${wireTaskRoot} does not exist or is not a directory." >&2
+  exit 1
+fi
 
-mkdir -p $HOME/.local/bin
-ln -sf $wireDevContainerRoot/scripts/wire-task-env $HOME/.local/bin/wire-task-env
-echo "Created symlink for wire-task-env at $HOME/.local/bin/wire-task-env"
+mkdir -p "${HOME}/.local/bin"
 
-ln -sf $wireDevContainerRoot/scripts/claude-task-env $HOME/.local/bin/claude-task-env
-echo "Created symlink for claude-task-env at $HOME/.local/bin/claude-task-env"
+ln -sf "${wireDevContainerRoot}/scripts/wire-task-env" "${HOME}/.local/bin/wire-task-env"
+echo "Created symlink for wire-task-env at ${HOME}/.local/bin/wire-task-env"
 
-ln -sf $wireDevContainerRoot/.devcontainer $wireRepoRoot/.devcontainer
-echo "All required repos are present and Docker is available. You can now run `wire-task-env` or `claude-task-env"
+ln -sf "${wireDevContainerRoot}/scripts/claude-task-env" "${HOME}/.local/bin/claude-task-env"
+echo "Created symlink for claude-task-env at ${HOME}/.local/bin/claude-task-env"
+
+ln -sf "${wireDevContainerRoot}/.devcontainer" "${wireRepoRoot}/.devcontainer"
+echo "All required repos are present and Docker is available. You can now run 'wire-task-env' or 'claude-task-env'"

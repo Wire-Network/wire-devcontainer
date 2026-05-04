@@ -1,57 +1,67 @@
-#!/usr/bin/env fish
+#!/usr/bin/env bash
+# =============================================================================
+# devcontainer-e2e-build
+#
+# In-container entrypoint that delegates the full Wire stack build (cdt →
+# sysio → libraries-ts → tools-ts → ethereum → solana) to
+# scripts/wire-local-setup.bash.
+#
+# Must be run from inside the devcontainer — guarded by IN_DEVCONTAINER /
+# WIRE_WORKSPACE / CC / CXX presence checks.
+# =============================================================================
 
-if not set -q IN_DEVCONTAINER || not set -q WIRE_WORKSPACE || not set -q CC || not set -q CXX  
-    echo "This script is meant to be run inside the devcontainer. Please run './scripts/devcontainer-setup' first."
-    exit 255
-end
+set -euo pipefail
 
-set -gx WIRE_PREFIX $HOME/.local
-set -gx wireDevContainerBinDir (dirname (realpath (status filename)))
-set -gx wireDevContainerRoot (dirname $wireDevContainerBinDir)
-set -gx wireRepoRoot (realpath (dirname $wireDevContainerRoot))
-set -gx wireOPPRoot $wireRepoRoot/wire-sysio/build/opp
+# --- devcontainer guard ------------------------------------------------------
 
-set -g _wireDefaultRepos wire-sysio wire-cdt wire-libraries-ts wire-tools-ts wire-ethereum wire-solana wire-vcpkg-registry
+if [[ -z "${IN_DEVCONTAINER:-}" ]] \
+  || [[ -z "${WIRE_WORKSPACE:-}" ]] \
+  || [[ -z "${CC:-}" ]] \
+  || [[ -z "${CXX:-}" ]]; then
+  echo "This script is meant to be run inside the devcontainer. Please run './scripts/devcontainer-setup' first." >&2
+  exit 255
+fi
 
-if not set -q TASK_CPUS
-		set -gx TASK_CPUS 4
-end
-set -gx cpuCount (math ceil\( $TASK_CPUS / 2 \) )
+# --- path resolution ---------------------------------------------------------
 
-function die
-    echo "$argv[1]"
-    exit 255
-end
+export WIRE_PREFIX="${HOME}/.local"
 
-function run
-    set cmd $argv
-    eval "$cmd"; or die "An error occurred while executing: $cmd"
-end
+wireDevContainerBinDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+wireDevContainerRoot="$(dirname "${wireDevContainerBinDir}")"
+wireRepoRoot="$(cd "$(dirname "${wireDevContainerRoot}")" && pwd)"
+wireOPPRoot="${wireRepoRoot}/wire-sysio/build/opp"
 
-function set-default
-    set newValue $argv[1]
-    set -q $newValue
-    and echo $newValue
-    or echo $argv[2]
-end
+export wireDevContainerBinDir wireDevContainerRoot wireRepoRoot wireOPPRoot
 
-function set-or-default
-    set newValue $argv[1]
-    if test -z $newValue
-        set $newValue $argv[2]
-    end
-end
+# Default TASK_CPUS to 4 if unset; cpuCount = ceil(TASK_CPUS / 2). Bash
+# integer math truncates, so `(N + 1) / 2` is the standard ceiling idiom
+# for positive integers.
+: "${TASK_CPUS:=4}"
+export TASK_CPUS
+cpuCount=$(( (TASK_CPUS + 1) / 2 ))
+export cpuCount
 
-set wireSetupScript "$wireDevContainerBinDir/wire-local-setup.bash"
-if not test -e $wireSetupScript
-	die "$wireSetupScript is missing"
-end
+# --- helpers -----------------------------------------------------------------
 
-set wireSetupCmd $wireSetupScript \
-	--skip-apt \
-	--skip-clone \
-	--ignore-docker \
-	$wireRepoRoot
+die() {
+  echo "$1" >&2
+  exit 255
+}
 
-echo "Starting: $wireSetupCmd"
-run $wireSetupCmd
+run() {
+  "$@" || die "An error occurred while executing: $*"
+}
+
+# --- delegate to wire-local-setup.bash --------------------------------------
+
+wireSetupScript="${wireDevContainerBinDir}/wire-local-setup.bash"
+if [[ ! -e "${wireSetupScript}" ]]; then
+  die "${wireSetupScript} is missing"
+fi
+
+echo "Starting: ${wireSetupScript} --skip-apt --skip-clone --ignore-docker ${wireRepoRoot}"
+run "${wireSetupScript}" \
+  --skip-apt \
+  --skip-clone \
+  --ignore-docker \
+  "${wireRepoRoot}"
