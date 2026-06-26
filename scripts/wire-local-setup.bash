@@ -466,7 +466,8 @@ cd "${WIRE_ROOT}/wire-sysio"
 log "wire-sysio: Building OPP Bundles"
 pushd ./libraries/opp/tools
 pnpm install
-pnpm --filter "proto*" dist
+# Use a path selector because the proto workspace package names are scoped as @wireio/*.
+pnpm --filter "./proto*" dist
 
 for p in protoc-gen-solidity protoc-gen-solana protobuf-bundler
 do
