@@ -105,12 +105,10 @@ function _cmd_up
     taskd_id=$task_id
     repos: $all_repos
     worktree=$wt"
-    run mkdir -p $wt ~/.claude-tasks/
-    if not test -d ~/.claude-tasks/$task_id
-				run mkdir -p ~/.claude-tasks/$task_id
-				run rsync -a ~/.claude/ ~/.claude-tasks/$task_id/
-				run cp ~/.claude.json ~/.claude-tasks/$task_id/
-		end
+    # Do not copy host Claude credentials or config into task state. Task
+    # containers may execute untrusted repository code, so Claude state must
+    # remain container-local and ephemeral.
+    run mkdir -p $wt
 
 
     for r in $all_repos
@@ -156,7 +154,6 @@ function _cmd_up
             TASK_WORKTREE=$wt \
             TASK_CPUS=$cpuPerTask \
             TASK_MEM=$memGBPerTask \
-            TASK_SOURCE_ROOT=$wireRepoRoot \
               devcontainer $argv
        echo "Running devcontainer command: $cmd"
 			 run $cmd
@@ -169,7 +166,7 @@ function _cmd_up
 
     run_in_devcontainer up --workspace-folder $wt
     run_exec_in_devcontainer devcontainer-e2e-build
-    run_exec_in_devcontainer claude --permission-mode bypassPermissions
+    run_exec_in_devcontainer claude
 
 end
 

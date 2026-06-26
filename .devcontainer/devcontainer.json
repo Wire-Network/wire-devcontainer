@@ -10,24 +10,17 @@
 		"--cpus", "${localEnv:TASK_CPUS}",
 		"--memory", "${localEnv:TASK_MEM}g",
 		"--pids-limit", "1048576",
-		"--security-opt", "seccomp=unconfined",
-		"--security-opt", "apparmor=unconfined",
-		"--security-opt", "label=disable",
 		"--tmpfs", "/tmp:exec,size=8g"
 	],
 	"mounts": [
 		"source=wire-ccache,target=/cache/ccache,type=volume",
 		"source=wire-vcpkg,target=/cache/vcpkg,type=volume",
 		"source=wire-pnpm,target=/cache/pnpm,type=volume",
-		"source=wire-cargo,target=/cache/cargo,type=volume",
-		"source=${localEnv:HOME}/.claude-tasks/${localEnv:TASK_ID},target=/home/dev/.claude-task,type=bind",
-		"source=${localEnv:HOME}/.claude.json,target=/home/dev/.claude.json,type=bind,readonly",
-		"source=${localEnv:TASK_SOURCE_ROOT},target=${localEnv:TASK_SOURCE_ROOT},type=bind"
+		"source=wire-cargo,target=/cache/cargo,type=volume"
 	],
 	"containerEnv": {
 		"TASK_ID": "${localEnv:TASK_ID}",
 		"TASK_CPUS": "${localEnv:TASK_CPUS}",
-		"TASK_SOURCE_ROOT": "${localEnv:TASK_SOURCE_ROOT}",
 		"PATH": "/workspace/.devcontainer/bin:/cache/pnpm:/home/dev/.local/bin:/cache/nvm/versions/node/default/bin:/home/dev/.local/share/solana/install/active_release/bin:/home/dev/.foundry/bin:/cache/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 	},
 	"remoteUser": "dev"

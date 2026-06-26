@@ -79,7 +79,7 @@ Uses `ccache` and `vcpkg` shared caches, so subsequent runs (or runs in new cont
 
 CLI with `up` and `down` subcommands. Uses Fish `argparse` for option parsing.
 
-**`up TASK_ID BRANCH [REPO...]`** - Creates worktrees, inits submodules, copies wire-opp, pins CPUs, launches devcontainer + Claude.
+**`up TASK_ID BRANCH [REPO...]`** - Creates worktrees, inits submodules, copies wire-opp, pins CPUs, launches devcontainer + Claude. It does not copy or bind-mount host Claude credentials/config into the task container.
 
 **`down TASK_ID`** - Removes container, worktrees, and task directories.
 
@@ -103,9 +103,9 @@ All caches under `/cache/` (ccache, vcpkg, pnpm, cargo) — mounted as Docker na
 
 - Workspace bind-mounted from `$TASK_WORKTREE` to `/workspace`
 - Container named `claude-$TASK_ID`
-- 32 GB memory, CPU pinning via `$TASK_CPUS`, 4096 PID limit
+- 32 GB memory, CPU pinning via `$TASK_CPUS`, 1048576 PID limit
 - Cache volumes: `wire-ccache`, `wire-vcpkg`, `wire-pnpm`, `wire-cargo`
-- Task-specific Claude config: `~/.claude-tasks/$TASK_ID` -> `/home/dev/.claude-task`
+- Host Claude credentials/config are not mounted into task containers; Claude state is container-local.
 
 ## Code Style
 

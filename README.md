@@ -160,7 +160,7 @@ claude-task-env down task-1
 1. Creates git worktrees for all default repos (+ any extras) at `wire-tasks/<TASK_ID>/`
 2. Initializes git submodules where `.gitmodules` exists
 3. Copies `wire-opp` into the worktree if the repo exists
-4. Launches a devcontainer and opens a Claude Code session inside it
+4. Launches a devcontainer and opens a Claude Code session inside it without copying or mounting host Claude credentials/config
 
 **`claude-task-env down TASK_ID`**
 
@@ -179,7 +179,8 @@ Docker named volumes persist across tasks and container rebuilds:
 | `wire-pnpm`   | `/cache/pnpm`   | pnpm package store               |
 | `wire-cargo`  | `/cache/cargo`  | Rust/Cargo cache                 |
 
-Task-specific Claude config is bind-mounted from `~/.claude-tasks/<TASK_ID>/`.
+Host Claude credentials/config are not copied or bind-mounted into task containers. Claude state stays inside the
+container filesystem for the lifetime of that task container.
 
 ### Container Resources
 
@@ -187,7 +188,7 @@ Configured in `.devcontainer/devcontainer.json`:
 
 - **Memory**: 32 GB
 - **CPU**: Pinned via `--cpuset-cpus` (calculated from TASK_ID and core count)
-- **PID limit**: 4096
+- **PID limit**: 1048576
 - **tmpfs**: 8 GB at `/tmp`
 - **User**: `dev` (non-root, UID 1000)
 

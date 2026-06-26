@@ -86,7 +86,6 @@ ENV VCPKG_BINARY_SOURCES="files,${VCPKG_BINARY_CACHE_DIR},readwrite"
 ENV PNPM_STORE_DIR=/cache/pnpm
 ENV PNPM_HOME=${PNPM_STORE_DIR}
 ENV CARGO_HOME=/cache/cargo
-ENV CLAUDE_CONFIG_DIR=${HOME}/.claude-task
 ENV NVM_DIR="/cache/nvm"
 ENV WIRE_WORKSPACE=/workspace
 ENV IN_DEVCONTAINER=1
@@ -152,8 +151,7 @@ RUN echo "export PATH=${PATH}" >> ${HOME}/.profile && \
 WORKDIR /workspace
 
 ARG HUGGING_FACE_HUB_TOKEN_ARG=""
-ENV HUGGING_FACE_HUB_TOKEN="${HUGGING_FACE_HUB_TOKEN_ARG}"
-RUN if [[ "${HUGGING_FACE_HUB_TOKEN}" != "" ]]; then; \
+RUN if [ -n "${HUGGING_FACE_HUB_TOKEN_ARG}" ]; then \
     curl -fsSL https://raw.githubusercontent.com/FarhanAliRaza/claude-context-local/main/scripts/install.sh | bash && \
 		claude mcp add code-search \
 	    --scope user -- \
