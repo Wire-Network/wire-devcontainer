@@ -476,7 +476,15 @@ do
 done
 
 echo "wire-protobuf-bundler,protoc-gen-solana,protoc-gen-solidity are on the PATH"
-./scripts/generate-opp-bundles.fish
+# Paths are relative to wire-sysio/libraries/opp/tools (the pushd above).
+# Prefer the current Bash generator; retain Fish support for older branches.
+if [ -x ./scripts/generate-opp-bundles.sh ]; then
+  ./scripts/generate-opp-bundles.sh
+elif [ -x ./scripts/generate-opp-bundles.fish ]; then
+  ./scripts/generate-opp-bundles.fish
+else
+  die "no executable OPP bundle generator in ${PWD}/scripts (expected generate-opp-bundles.sh or generate-opp-bundles.fish)"
+fi
 popd
 
 log "wire-sysio: CMake configure & build"
