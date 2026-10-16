@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       software-properties-common \
     && apt-get install -y \
       build-essential \
+      openjdk-21-jre-headless \
       binutils \
       ccache \
       cmake \
