@@ -176,9 +176,9 @@ WORKDIR ${WIRE_ROOT}
 # `set -e` (via `&&` chaining) ensures any failure aborts before the unset.
 
 ARG GIT_BRANCH_CDT=master
-ARG GIT_BRANCH_SYSIO=feature/opp-part2
-ARG GIT_BRANCH_SOLANA=feature/opp-solana-outpost-integration
-ARG GIT_BRANCH_ETHEREUM=feature/protobufs-for-opp
+ARG GIT_BRANCH_SYSIO=master
+ARG GIT_BRANCH_SOLANA=next
+ARG GIT_BRANCH_ETHEREUM=next
 ARG GIT_BRANCH_LIBRARIES_TS=master
 ARG GIT_BRANCH_TOOLS_TS=master
 RUN --mount=type=secret,id=github_token,required=true \
