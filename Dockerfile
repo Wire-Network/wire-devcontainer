@@ -109,6 +109,21 @@ RUN curl -L https://foundry.paradigm.xyz | bash \
     && ${HOME}/.foundry/bin/foundryup
 ENV PATH="${HOME}/.foundry/bin:${PATH}"
 
+# -- go-ethereum (geth) --
+# wire-sysio's `test_outpost_ethereum_client_plugin` starts `geth --dev` for its
+# conformance suite and fails without a `geth` on PATH. Pinned by release and
+# checksum, the same release as wire-sysio's CI images (.cicd/platforms/*.Dockerfile).
+# Installed under the dev user's ~/.local/bin, where wire-cdt installs too and
+# which joins PATH below.
+ARG GETH_RELEASE=1.17.10-1df30b18
+ARG GETH_SHA256=e016aca8cc391c8d5d14dc17c9af589488d99c37ed71d892213c80757935ba64
+RUN wget -nv -O /tmp/geth.tar.gz "https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-${GETH_RELEASE}.tar.gz" \
+    && echo "${GETH_SHA256}  /tmp/geth.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/geth.tar.gz -C /tmp \
+    && install -D -m 755 "/tmp/geth-linux-amd64-${GETH_RELEASE}/geth" ${HOME}/.local/bin/geth \
+    && rm -rf /tmp/geth.tar.gz "/tmp/geth-linux-amd64-${GETH_RELEASE}" \
+    && ${HOME}/.local/bin/geth version
+
 # -- Solana CLI (solana-test-validator) --
 RUN sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)" \
     && true
@@ -154,14 +169,16 @@ WORKDIR /workspace
 
 ARG HUGGING_FACE_HUB_TOKEN_ARG=""
 ENV HUGGING_FACE_HUB_TOKEN="${HUGGING_FACE_HUB_TOKEN_ARG}"
-RUN if [[ "${HUGGING_FACE_HUB_TOKEN}" != "" ]]; then; \
+# RUN executes under /bin/sh (dash on Ubuntu), so the test is POSIX `[ -n ]`:
+# `[[` and a stray `;` after `then` broke this step on every builder.
+RUN if [ -n "${HUGGING_FACE_HUB_TOKEN}" ]; then \
     curl -fsSL https://raw.githubusercontent.com/FarhanAliRaza/claude-context-local/main/scripts/install.sh | bash && \
-		claude mcp add code-search \
-	    --scope user -- \
-	    uv run --directory \
-	    ~/.local/share/claude-context-local \
-	    python mcp_server/server.py; \
-fi
+    claude mcp add code-search \
+        --scope user -- \
+        uv run --directory \
+        ~/.local/share/claude-context-local \
+        python mcp_server/server.py; \
+    fi
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["fish"]
