@@ -128,7 +128,12 @@ function _cmd_up
         # initialize submodules if present
         if test -f $wt/$r/.gitmodules
             echo "Initializing submodules for $r..."
-            run git -C $wt/$r submodule update --init --recursive
+            # Sysio uses only top-level modules; other repositories still initialize recursively.
+            set -l submodule_flags --recursive
+            if test "$r" = wire-sysio
+                set submodule_flags
+            end
+            run git -C $wt/$r submodule update --init $submodule_flags
         end
     end
 

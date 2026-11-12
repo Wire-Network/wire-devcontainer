@@ -54,17 +54,24 @@ clone_repo() {
     git pull
     log "pulling: ${repo_name}"
     popd
-    return 0
-  fi
-  if [[ -e "${target_dir}" ]]; then
+  elif [[ -e "${target_dir}" ]]; then
     die "${target_dir} exists but is not a git checkout — refusing to clone over it"
-  fi
-
-  log "cloning ${repo_name}${branch:+ (branch: ${branch})}"
-  if [[ -n "${branch}" ]]; then
-    git clone -b "${branch}" --recursive "${repo_url}" "${target_dir}"
   else
-    git clone --recursive "${repo_url}" "${target_dir}"
+    # Sysio consumes top-level modules; preserve recursive cloning for other repositories.
+    local -a submodule_args=(--recursive)
+    if [[ "${repo_name}" == wire-sysio ]]; then
+      submodule_args=()
+    fi
+    log "cloning ${repo_name}${branch:+ (branch: ${branch})}"
+    if [[ -n "${branch}" ]]; then
+      git clone -b "${branch}" "${submodule_args[@]}" "${repo_url}" "${target_dir}"
+    else
+      git clone "${submodule_args[@]}" "${repo_url}" "${target_dir}"
+    fi
+  fi
+  # Refresh an existing Sysio checkout too, so a newly pinned VM is initialized after pull.
+  if [[ "${repo_name}" == wire-sysio ]]; then
+    git -C "${target_dir}" submodule update --init
   fi
 }
 
