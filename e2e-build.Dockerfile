@@ -175,6 +175,7 @@ WORKDIR ${WIRE_ROOT}
 #
 # `set -e` (via `&&` chaining) ensures any failure aborts before the unset.
 
+# Sysio uses only top-level modules; the other repositories retain recursive cloning.
 ARG GIT_BRANCH_CDT=master
 ARG GIT_BRANCH_SYSIO=feature/opp-part2
 ARG GIT_BRANCH_SOLANA=feature/opp-solana-outpost-integration
@@ -197,8 +198,9 @@ RUN --mount=type=secret,id=github_token,required=true \
         https://github.com/Wire-Network/wire-solana.git && \
     git clone -b ${GIT_BRANCH_CDT} --recursive \
         https://github.com/Wire-Network/wire-cdt.git && \
-    git clone -b ${GIT_BRANCH_SYSIO} --recursive \
+    git clone -b ${GIT_BRANCH_SYSIO} \
         https://github.com/Wire-Network/wire-sysio.git && \
+    git -C wire-sysio submodule update --init && \
     git config --global --unset-all "${INSTEAD_OF_KEY}"
 
 ENV VCPKG_DEFAULT_BINARY_CACHE=/vcpkg-cache
